@@ -2,7 +2,10 @@ module github.com/1143910315/UDPRelayServer
 
 go 1.25.3
 
-require fyne.io/fyne/v2 v2.7.0
+require (
+	fyne.io/fyne/v2 v2.7.0
+	github.com/mattn/go-sqlite3 v1.14.32
+)
 
 require (
 	fyne.io/systray v1.11.1-0.20250603113521-ca66a66d8b58 // indirect
