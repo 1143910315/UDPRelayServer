@@ -20,15 +20,15 @@ import (
 
 // 玩家结构体
 type Player struct {
-    ID                string
-    Remark            string
-    Port              int
-    TotalUpload       int64
-    TotalDownload     int64
-    LastUpload        int64
-    LastDownload      int64
-    Ping              int
-    LastSpeedCalcTime time.Time
+	ID                string
+	Remark            string
+	Port              int
+	TotalUpload       int64
+	TotalDownload     int64
+	LastUpload        int64
+	LastDownload      int64
+	Ping              int
+	LastSpeedCalcTime time.Time
 }
 
 // 配置管理结构体
@@ -243,10 +243,10 @@ type UDPRelayApp struct {
 	stopBtn       *widget.Button
 	configManager *ConfigManager
 	// 玩家列表控件
-    playerTable   *widget.Table
-    // 玩家列表
-    players       []*Player
-    playersMutex  sync.RWMutex
+	playerTable *widget.Table
+	// 玩家列表
+	players      []*Player
+	playersMutex sync.RWMutex
 }
 
 // 在应用程序退出时关闭配置管理器
@@ -288,6 +288,17 @@ func (ua *UDPRelayApp) createUI() {
 		listenPortEntry.SetText(ua.configManager.GetConfig("listen_port", "8080"))
 		targetHostEntry.SetText(ua.configManager.GetConfig("target_host", "127.0.0.1"))
 		targetPortEntry.SetText(ua.configManager.GetConfig("target_port", "8081"))
+
+		// 设置配置保存回调
+		listenPortEntry.OnChanged = func(text string) {
+			ua.configManager.SetConfig("listen_port", text)
+		}
+		targetHostEntry.OnChanged = func(text string) {
+			ua.configManager.SetConfig("target_host", text)
+		}
+		targetPortEntry.OnChanged = func(text string) {
+			ua.configManager.SetConfig("target_port", text)
+		}
 	} else {
 		listenPortEntry.SetText("8080")
 		targetHostEntry.SetText("127.0.0.1")
@@ -298,25 +309,12 @@ func (ua *UDPRelayApp) createUI() {
 	targetHostEntry.SetPlaceHolder("目标主机")
 	targetPortEntry.SetPlaceHolder("目标端口")
 
-	// 设置配置保存回调
-	if ua.configManager != nil {
-		listenPortEntry.OnChanged = func(text string) {
-			ua.configManager.SetConfig("listen_port", text)
-		}
-		targetHostEntry.OnChanged = func(text string) {
-			ua.configManager.SetConfig("target_host", text)
-		}
-		targetPortEntry.OnChanged = func(text string) {
-			ua.configManager.SetConfig("target_port", text)
-		}
-	}
-
 	// 状态标签
 	ua.statusLabel = widget.NewLabel("状态: 未启动")
 	ua.statusLabel.Alignment = fyne.TextAlignCenter
 
 	// 创建玩家列表表格
-    ua.createPlayerTable()
+	ua.createPlayerTable()
 
 	// 日志区域
 	ua.logText = widget.NewMultiLineEntry()
@@ -406,21 +404,22 @@ func (ua *UDPRelayApp) createUI() {
 	)
 
 	logScroll := container.NewScroll(ua.logText)
-	logScroll.SetMinSize(fyne.NewSize(580, 300))
+	logScroll.SetMinSize(fyne.NewSize(400, 150))
 
-	content := container.NewVBox(
+	topContent := container.NewVBox(
 		widget.NewLabel("UDP 中继服务器配置"),
 		inputForm,
 		buttonRow,
 		statusBox,
 		widget.NewSeparator(),
 		widget.NewLabel("玩家列表"),
-        container.NewScroll(ua.playerTable),
-        widget.NewSeparator(),
+		container.NewScroll(ua.playerTable),
+		widget.NewSeparator(),
 		widget.NewLabel("运行日志"),
-		logScroll,
 	)
 
+	// 使用Border布局，将顶部内容放在North，日志区域放在Center以填充剩余空间
+	content := container.NewBorder(topContent, nil, nil, nil, logScroll)
 	ua.window.SetContent(content)
 }
 
@@ -443,106 +442,106 @@ func (ua *UDPRelayApp) Run() {
 
 // 创建玩家表格
 func (ua *UDPRelayApp) createPlayerTable() {
-    ua.playerTable = widget.NewTable(
-        func() (int, int) {
-            ua.playersMutex.RLock()
-            defer ua.playersMutex.RUnlock()
-            return len(ua.players) + 1, 5 // 行数(玩家数+表头)，列数
-        },
-        func() fyne.CanvasObject {
-            return widget.NewLabel("模板文本")
-        },
-        func(tci widget.TableCellID, co fyne.CanvasObject) {
-            label := co.(*widget.Label)
-            if tci.Row == 0 {
-                // 表头
-                switch tci.Col {
-                case 0:
-                    label.SetText("玩家")
-                case 1:
-                    label.SetText("端口")
-                case 2:
-                    label.SetText("上传速度")
-                case 3:
-                    label.SetText("下载速度")
-                case 4:
-                    label.SetText("Ping")
-                }
-                return
-            }
+	ua.playerTable = widget.NewTable(
+		func() (int, int) {
+			ua.playersMutex.RLock()
+			defer ua.playersMutex.RUnlock()
+			return len(ua.players) + 1, 5 // 行数(玩家数+表头)，列数
+		},
+		func() fyne.CanvasObject {
+			return widget.NewLabel("模板文本")
+		},
+		func(tci widget.TableCellID, co fyne.CanvasObject) {
+			label := co.(*widget.Label)
+			if tci.Row == 0 {
+				// 表头
+				switch tci.Col {
+				case 0:
+					label.SetText("玩家")
+				case 1:
+					label.SetText("端口")
+				case 2:
+					label.SetText("上传速度")
+				case 3:
+					label.SetText("下载速度")
+				case 4:
+					label.SetText("Ping")
+				}
+				return
+			}
 
-            ua.playersMutex.RLock()
-            defer ua.playersMutex.RUnlock()
-            
-            if tci.Row-1 < len(ua.players) {
-                player := ua.players[tci.Row-1]
-                switch tci.Col {
-                case 0:
-                    // 展示备注，如果没有备注则展示ID
-                    if player.Remark != "" {
-                        label.SetText(player.Remark)
-                    } else {
-                        label.SetText(player.ID)
-                    }
-                case 1:
-                    label.SetText(strconv.Itoa(player.Port))
-                case 2:
-                    // 计算上传速度
-                    speed := ua.calculateUploadSpeed(player)
-                    label.SetText(fmt.Sprintf("%.2f KB/s", speed))
-                case 3:
-                    // 计算下载速度
-                    speed := ua.calculateDownloadSpeed(player)
-                    label.SetText(fmt.Sprintf("%.2f KB/s", speed))
-                case 4:
-                    label.SetText(strconv.Itoa(player.Ping) + "ms")
-                }
-            }
-        },
-    )
-    
-    ua.playerTable.SetColumnWidth(0, 150) // 玩家列宽度
-    ua.playerTable.SetColumnWidth(1, 80)  // 端口列宽度
-    ua.playerTable.SetColumnWidth(2, 100) // 上传速度列宽度
-    ua.playerTable.SetColumnWidth(3, 100) // 下载速度列宽度
-    ua.playerTable.SetColumnWidth(4, 80)  // Ping列宽度
+			ua.playersMutex.RLock()
+			defer ua.playersMutex.RUnlock()
+
+			if tci.Row-1 < len(ua.players) {
+				player := ua.players[tci.Row-1]
+				switch tci.Col {
+				case 0:
+					// 展示备注，如果没有备注则展示ID
+					if player.Remark != "" {
+						label.SetText(player.Remark)
+					} else {
+						label.SetText(player.ID)
+					}
+				case 1:
+					label.SetText(strconv.Itoa(player.Port))
+				case 2:
+					// 计算上传速度
+					speed := ua.calculateUploadSpeed(player)
+					label.SetText(fmt.Sprintf("%.2f KB/s", speed))
+				case 3:
+					// 计算下载速度
+					speed := ua.calculateDownloadSpeed(player)
+					label.SetText(fmt.Sprintf("%.2f KB/s", speed))
+				case 4:
+					label.SetText(strconv.Itoa(player.Ping) + "ms")
+				}
+			}
+		},
+	)
+
+	ua.playerTable.SetColumnWidth(0, 150) // 玩家列宽度
+	ua.playerTable.SetColumnWidth(1, 80)  // 端口列宽度
+	ua.playerTable.SetColumnWidth(2, 100) // 上传速度列宽度
+	ua.playerTable.SetColumnWidth(3, 100) // 下载速度列宽度
+	ua.playerTable.SetColumnWidth(4, 80)  // Ping列宽度
 }
 
 // 计算上传速度
 func (ua *UDPRelayApp) calculateUploadSpeed(player *Player) float64 {
-    if time.Since(player.LastSpeedCalcTime).Seconds() < 1 {
-        return 0
-    }
-    
-    speed := float64(player.TotalUpload-player.LastUpload) / 1024 / 
-             time.Since(player.LastSpeedCalcTime).Seconds()
-    
-    player.LastUpload = player.TotalUpload
-    player.LastSpeedCalcTime = time.Now()
-    
-    return speed
+	if time.Since(player.LastSpeedCalcTime).Seconds() < 1 {
+		return 0
+	}
+
+	speed := float64(player.TotalUpload-player.LastUpload) / 1024 /
+		time.Since(player.LastSpeedCalcTime).Seconds()
+
+	player.LastUpload = player.TotalUpload
+	player.LastSpeedCalcTime = time.Now()
+
+	return speed
 }
 
 // 计算下载速度
 func (ua *UDPRelayApp) calculateDownloadSpeed(player *Player) float64 {
-    if time.Since(player.LastSpeedCalcTime).Seconds() < 1 {
-        return 0
-    }
-    
-    speed := float64(player.TotalDownload-player.LastDownload) / 1024 / 
-             time.Since(player.LastSpeedCalcTime).Seconds()
-    
-    player.LastDownload = player.TotalDownload
-    player.LastSpeedCalcTime = time.Now()
-    
-    return speed
+	if time.Since(player.LastSpeedCalcTime).Seconds() < 1 {
+		return 0
+	}
+
+	speed := float64(player.TotalDownload-player.LastDownload) / 1024 /
+		time.Since(player.LastSpeedCalcTime).Seconds()
+
+	player.LastDownload = player.TotalDownload
+	player.LastSpeedCalcTime = time.Now()
+
+	return speed
 }
 
 // 更新玩家表格显示
 func (ua *UDPRelayApp) refreshPlayerTable() {
-    if ua.playerTable != nil {
-        ua.playerTable.Refresh()
-    }
+	if ua.playerTable != nil {
+		ua.playerTable.Refresh()
+	}
 }
 
 func main() {
