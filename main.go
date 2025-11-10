@@ -33,8 +33,10 @@ type Player struct {
 
 // 配置管理结构体
 type ConfigManager struct {
-	db    *sql.DB
-	mutex sync.RWMutex
+	db             *sql.DB
+	mutex          sync.RWMutex
+	debounceTimers map[string]*time.Timer
+	debounceWg     sync.WaitGroup
 }
 
 // UDPRelay 表示一个UDP中继服务器
@@ -68,7 +70,10 @@ func NewConfigManager() (*ConfigManager, error) {
 		return nil, err
 	}
 
-	return &ConfigManager{db: db}, nil
+	return &ConfigManager{
+		db:             db,
+		debounceTimers: make(map[string]*time.Timer),
+	}, nil
 }
 
 // 保存配置项
@@ -80,6 +85,36 @@ func (cm *ConfigManager) SetConfig(key, value string) error {
         INSERT OR REPLACE INTO app_config (key, value) 
         VALUES (?, ?)`, key, value)
 	return err
+}
+
+// 带防抖的配置管理器方法
+func (cm *ConfigManager) SetConfigDebounced(key, value string) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	// 如果已有定时器，先停止
+	if timer, exists := cm.debounceTimers[key]; exists {
+		if timer.Stop() {
+			// 如果成功停止了计时器，减少WaitGroup计数
+			cm.debounceWg.Done()
+		}
+	}
+
+	// 增加WaitGroup计数
+	cm.debounceWg.Add(1)
+
+	// 创建新的定时器
+	timer := time.AfterFunc(2000*time.Millisecond, func() {
+		cm.mutex.Lock()
+		delete(cm.debounceTimers, key)
+		cm.mutex.Unlock()
+		cm.SetConfig(key, value)
+		// 执行完成后减少计数
+		cm.debounceWg.Done()
+	})
+
+	// 存储定时器引用
+	cm.debounceTimers[key] = timer
 }
 
 // 读取配置项
@@ -98,6 +133,12 @@ func (cm *ConfigManager) GetConfig(key, defaultValue string) string {
 // 关闭数据库连接
 func (cm *ConfigManager) Close() error {
 	return cm.db.Close()
+}
+
+// 使用WaitGroup等待
+func (cm *ConfigManager) WaitForDebounced() {
+	// 等待所有正在执行的防抖操作完成
+	cm.debounceWg.Wait()
 }
 
 // NewUDPRelay 创建一个新的UDP中继实例
@@ -290,13 +331,13 @@ func (ua *UDPRelayApp) createUI() {
 
 		// 设置配置保存回调
 		listenPortEntry.OnChanged = func(text string) {
-			ua.configManager.SetConfig("listen_port", text)
+			ua.configManager.SetConfigDebounced("listen_port", text)
 		}
 		targetHostEntry.OnChanged = func(text string) {
-			ua.configManager.SetConfig("target_host", text)
+			ua.configManager.SetConfigDebounced("target_host", text)
 		}
 		targetPortEntry.OnChanged = func(text string) {
-			ua.configManager.SetConfig("target_port", text)
+			ua.configManager.SetConfigDebounced("target_port", text)
 		}
 	} else {
 		listenPortEntry.SetText("8080")
@@ -444,8 +485,6 @@ func (ua *UDPRelayApp) Run() {
 	ua.window.SetCloseIntercept(func() {
 		// 保存窗口状态
 		ua.saveWindowState()
-		// 清理资源
-		ua.Cleanup()
 		// 关闭窗口
 		ua.window.Close()
 	})
@@ -565,8 +604,8 @@ func (ua *UDPRelayApp) saveWindowState() {
 
 	// 保存窗口大小
 	size := ua.window.Content().Size()
-	ua.configManager.SetConfig("window_width", strconv.Itoa(int(size.Width)))
-	ua.configManager.SetConfig("window_height", strconv.Itoa(int(size.Height)))
+	ua.configManager.SetConfigDebounced("window_width", strconv.Itoa(int(size.Width)))
+	ua.configManager.SetConfigDebounced("window_height", strconv.Itoa(int(size.Height)))
 }
 
 // 恢复窗口大小
@@ -585,4 +624,7 @@ func (ua *UDPRelayApp) restoreWindowState() {
 func main() {
 	relayApp := NewUDPRelayApp()
 	relayApp.Run()
+	relayApp.configManager.WaitForDebounced()
+	// 清理资源
+	relayApp.Cleanup()
 }
