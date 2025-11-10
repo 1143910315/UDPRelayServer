@@ -260,7 +260,6 @@ func (ua *UDPRelayApp) Cleanup() {
 func NewUDPRelayApp() *UDPRelayApp {
 	myApp := app.New()
 	window := myApp.NewWindow("UDP 中继服务器")
-	window.Resize(fyne.NewSize(1024, 768))
 
 	// 初始化配置管理器
 	configManager, err := NewConfigManager()
@@ -404,7 +403,7 @@ func (ua *UDPRelayApp) createUI() {
 	)
 
 	logScroll := container.NewScroll(ua.logText)
-	logScroll.SetMinSize(fyne.NewSize(400, 150))
+	logScroll.SetMinSize(fyne.NewSize(550, 150))
 
 	topContent := container.NewVBox(
 		widget.NewLabel("UDP 中继服务器配置"),
@@ -437,6 +436,20 @@ func (ua *UDPRelayApp) appendLog(message string) {
 // Run 运行应用程序
 func (ua *UDPRelayApp) Run() {
 	ua.createUI()
+
+	// 恢复窗口状态
+	ua.restoreWindowState()
+
+	// 设置窗口关闭事件处理
+	ua.window.SetCloseIntercept(func() {
+		// 保存窗口状态
+		ua.saveWindowState()
+		// 清理资源
+		ua.Cleanup()
+		// 关闭窗口
+		ua.window.Close()
+	})
+
 	ua.window.ShowAndRun()
 }
 
@@ -544,8 +557,32 @@ func (ua *UDPRelayApp) refreshPlayerTable() {
 	}
 }
 
+// 保存窗口大小
+func (ua *UDPRelayApp) saveWindowState() {
+	if ua.configManager == nil {
+		return
+	}
+
+	// 保存窗口大小
+	size := ua.window.Content().Size()
+	ua.configManager.SetConfig("window_width", strconv.Itoa(int(size.Width)))
+	ua.configManager.SetConfig("window_height", strconv.Itoa(int(size.Height)))
+}
+
+// 恢复窗口大小
+func (ua *UDPRelayApp) restoreWindowState() {
+	if ua.configManager == nil {
+		ua.window.Resize(fyne.NewSize(1024, 768))
+		return
+	}
+
+	// 恢复窗口大小
+	width, _ := strconv.Atoi(ua.configManager.GetConfig("window_width", "1024"))
+	height, _ := strconv.Atoi(ua.configManager.GetConfig("window_height", "768"))
+	ua.window.Resize(fyne.NewSize(float32(width), float32(height)))
+}
+
 func main() {
 	relayApp := NewUDPRelayApp()
 	relayApp.Run()
-	relayApp.Cleanup()
 }
