@@ -349,18 +349,6 @@ func (ua *UDPRelayApp) createUI() {
 	targetHostEntry.SetPlaceHolder("目标主机")
 	targetPortEntry.SetPlaceHolder("目标端口")
 
-	// 状态标签
-	ua.statusLabel = widget.NewLabel("状态: 未启动")
-	ua.statusLabel.Alignment = fyne.TextAlignCenter
-
-	// 创建玩家列表表格
-	ua.createPlayerTable()
-
-	// 日志区域
-	ua.logText = widget.NewMultiLineEntry()
-	ua.logText.SetPlaceHolder("日志将显示在这里...")
-	ua.logText.Disable()
-
 	// 按钮
 	ua.startBtn = widget.NewButton("启动服务器", nil)
 	ua.stopBtn = widget.NewButton("停止服务器", nil)
@@ -423,6 +411,20 @@ func (ua *UDPRelayApp) createUI() {
 		targetPortEntry.Enable()
 	}
 
+	// 状态标签
+	ua.statusLabel = widget.NewLabel("状态: 未启动")
+	ua.statusLabel.Alignment = fyne.TextAlignCenter
+
+	// 创建玩家列表表格
+	ua.createPlayerTable()
+	playerTableScroll:=container.NewScroll(ua.playerTable)
+	playerTableScroll.SetMinSize(fyne.NewSize(550, 150))
+
+	// 日志区域
+	ua.logText = widget.NewMultiLineEntry()
+	ua.logText.SetPlaceHolder("日志将显示在这里...")
+	ua.logText.Disable()
+
 	// 创建布局
 	inputForm := container.NewVBox(
 		widget.NewForm(
@@ -453,7 +455,7 @@ func (ua *UDPRelayApp) createUI() {
 		statusBox,
 		widget.NewSeparator(),
 		widget.NewLabel("玩家列表"),
-		container.NewScroll(ua.playerTable),
+		playerTableScroll,
 		widget.NewSeparator(),
 		widget.NewLabel("运行日志"),
 	)
