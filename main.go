@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"image/color"
 	"net"
 	"strconv"
 	"strings"
@@ -13,10 +14,35 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+// 自定义主题结构体
+type CustomTheme struct {
+}
+
+func (c CustomTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	//log.Println("name:" + string(name) + ", variant:" + strconv.FormatUint(uint64(variant), 10) + ", color:" + fmt.Sprintf("%#v", theme.DefaultTheme().Color(name, variant)))
+	if name == theme.ColorNameDisabled {
+		return theme.DefaultTheme().Color(theme.ColorNameForeground, variant)
+	}
+	return theme.DefaultTheme().Color(name, variant)
+}
+
+func (c CustomTheme) Font(style fyne.TextStyle) fyne.Resource {
+	return theme.DefaultTheme().Font(style)
+}
+
+func (c CustomTheme) Icon(name fyne.ThemeIconName) fyne.Resource {
+	return theme.DefaultTheme().Icon(name)
+}
+
+func (c CustomTheme) Size(name fyne.ThemeSizeName) float32 {
+	return theme.DefaultTheme().Size(name)
+}
 
 // 玩家结构体
 type Player struct {
@@ -309,6 +335,9 @@ func NewUDPRelayApp() *UDPRelayApp {
 		fmt.Printf("配置管理器初始化失败: %v\n", err)
 	}
 
+	// 设置自定义主题
+	myApp.Settings().SetTheme(&CustomTheme{})
+
 	return &UDPRelayApp{
 		app:           myApp,
 		window:        window,
@@ -417,7 +446,7 @@ func (ua *UDPRelayApp) createUI() {
 
 	// 创建玩家列表表格
 	ua.createPlayerTable()
-	playerTableScroll:=container.NewScroll(ua.playerTable)
+	playerTableScroll := container.NewScroll(ua.playerTable)
 	playerTableScroll.SetMinSize(fyne.NewSize(550, 150))
 
 	// 日志区域
