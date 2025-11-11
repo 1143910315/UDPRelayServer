@@ -378,10 +378,15 @@ func (ua *UDPRelayApp) createUI() {
 	targetHostEntry.SetPlaceHolder("目标主机")
 	targetPortEntry.SetPlaceHolder("目标端口")
 
-	// 按钮
+	// 主机模式按钮
 	ua.startBtn = widget.NewButton("启动服务器", nil)
 	ua.stopBtn = widget.NewButton("停止服务器", nil)
 	ua.stopBtn.Disable()
+
+	// 客机模式按钮
+	connectBtn := widget.NewButton("连接服务器", nil)
+	disconnectBtn := widget.NewButton("断开服务器", nil)
+	disconnectBtn.Disable()
 
 	clearBtn := widget.NewButton("清空日志", func() {
 		ua.logText.SetText("")
@@ -440,6 +445,39 @@ func (ua *UDPRelayApp) createUI() {
 		targetPortEntry.Enable()
 	}
 
+	// 客机模式按钮事件处理（暂时为空实现）
+	connectBtn.OnTapped = func() {
+		targetHost := strings.TrimSpace(targetHostEntry.Text)
+		if targetHost == "" {
+			ua.appendLog("错误: 请输入目标主机地址")
+			return
+		}
+
+		targetPort, err := strconv.Atoi(targetPortEntry.Text)
+		if err != nil || targetPort < 1 || targetPort > 65535 {
+			ua.appendLog("错误: 目标端口必须是 1-65535 之间的数字")
+			return
+		}
+
+		// TODO: 实现客机连接逻辑
+		ua.appendLog(fmt.Sprintf("连接到服务器 %s:%d", targetHost, targetPort))
+		ua.statusLabel.SetText(fmt.Sprintf("状态: 已连接到 %s:%d", targetHost, targetPort))
+		connectBtn.Disable()
+		disconnectBtn.Enable()
+		targetHostEntry.Disable()
+		targetPortEntry.Disable()
+	}
+
+	disconnectBtn.OnTapped = func() {
+		// TODO: 实现客机断开逻辑
+		ua.appendLog("断开服务器连接")
+		ua.statusLabel.SetText("状态: 已断开")
+		connectBtn.Enable()
+		disconnectBtn.Disable()
+		targetHostEntry.Enable()
+		targetPortEntry.Enable()
+	}
+
 	// 状态标签
 	ua.statusLabel = widget.NewLabel("状态: 未启动")
 	ua.statusLabel.Alignment = fyne.TextAlignCenter
@@ -454,33 +492,59 @@ func (ua *UDPRelayApp) createUI() {
 	ua.logText.SetPlaceHolder("日志将显示在这里...")
 	ua.logText.Disable()
 
-	// 创建布局
-	inputForm := container.NewVBox(
-		widget.NewForm(
-			widget.NewFormItem("监听端口", listenPortEntry),
-			widget.NewFormItem("目标主机", targetHostEntry),
-			widget.NewFormItem("目标端口", targetPortEntry),
-		),
+	// 主机模式的内容
+	hostContent := container.NewVBox(
+		container.NewBorder(nil, nil, widget.NewLabel("监听端口"), nil, listenPortEntry),
+		container.NewBorder(nil, nil, widget.NewLabel("目标端口"), nil, targetPortEntry),
+		container.NewHBox(ua.startBtn, ua.stopBtn),
 	)
 
+	// 客机模式的内容
+	clientContent := container.NewVBox(
+		container.NewBorder(nil, nil, widget.NewLabel("目标主机"), nil, targetHostEntry),
+		layout.NewSpacer(),
+		container.NewHBox(connectBtn, disconnectBtn),
+	)
+
+	// 创建Tab容器
+	tabs := container.NewAppTabs(
+		container.NewTabItem("作为主机", hostContent),
+		container.NewTabItem("作为客机", clientContent),
+	)
+
+	// 设置Tab切换回调
+	tabs.OnSelected = func(ti *container.TabItem) {
+		if ua.configManager != nil {
+			// 保存当前选中的tab索引
+			tabIndex := strconv.Itoa(tabs.SelectedIndex())
+			ua.configManager.SetConfigDebounced("last_tab", tabIndex)
+		}
+	}
+
+	// 恢复最后选择的tab
+	if ua.configManager != nil {
+		lastTab := ua.configManager.GetConfig("last_tab", "0")
+		if tabIndex, err := strconv.Atoi(lastTab); err == nil && tabIndex >= 0 && tabIndex < len(tabs.Items) {
+			tabs.SelectIndex(tabIndex)
+		}
+	}
+
 	buttonRow := container.NewHBox(
-		ua.startBtn,
-		ua.stopBtn,
 		clearBtn,
 		layout.NewSpacer(),
 	)
 
 	statusBox := container.NewVBox(
 		ua.statusLabel,
+		buttonRow,
 	)
 
 	logScroll := container.NewScroll(ua.logText)
 	logScroll.SetMinSize(fyne.NewSize(550, 150))
 
 	topContent := container.NewVBox(
-		widget.NewLabel("UDP 中继服务器配置"),
-		inputForm,
-		buttonRow,
+		widget.NewLabel("UDP 中继服务器"),
+		tabs,
 		statusBox,
 		widget.NewSeparator(),
 		widget.NewLabel("玩家列表"),
