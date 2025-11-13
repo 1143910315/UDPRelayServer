@@ -27,7 +27,11 @@ type CustomTheme struct {
 func (c CustomTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
 	//log.Println("name:" + string(name) + ", variant:" + strconv.FormatUint(uint64(variant), 10) + ", color:" + fmt.Sprintf("%#v", theme.DefaultTheme().Color(name, variant)))
 	if name == theme.ColorNameDisabled {
-		return theme.DefaultTheme().Color(theme.ColorNameForeground, variant)
+		if variant == theme.VariantLight {
+			return color.RGBA{R: 128, G: 128, B: 128, A: 255}
+		} else {
+			return color.RGBA{R: 128, G: 128, B: 128, A: 255}
+		}
 	}
 	return theme.DefaultTheme().Color(name, variant)
 }
@@ -63,18 +67,6 @@ type ConfigManager struct {
 	mutex          sync.RWMutex
 	debounceTimers map[string]*time.Timer
 	debounceWg     sync.WaitGroup
-}
-
-// UDPRelay 表示一个UDP中继服务器
-type UDPRelay struct {
-	listenPort   int
-	targetHost   string
-	targetPort   int
-	isRunning    bool
-	conn         *net.UDPConn
-	clients      map[string]*net.UDPAddr
-	clientsMutex sync.RWMutex
-	logCallback  func(string)
 }
 
 // 初始化配置管理器
@@ -165,6 +157,18 @@ func (cm *ConfigManager) Close() error {
 func (cm *ConfigManager) WaitForDebounced() {
 	// 等待所有正在执行的防抖操作完成
 	cm.debounceWg.Wait()
+}
+
+// UDPRelay 表示一个UDP中继服务器
+type UDPRelay struct {
+	listenPort   int
+	targetHost   string
+	targetPort   int
+	isRunning    bool
+	conn         *net.UDPConn
+	clients      map[string]*net.UDPAddr
+	clientsMutex sync.RWMutex
+	logCallback  func(string)
 }
 
 // NewUDPRelay 创建一个新的UDP中继实例
@@ -299,28 +303,101 @@ func (r *UDPRelay) log(message string) {
 	}
 }
 
+// TCPRelay 表示一个TCP中继服务器
+type TCPRelay struct {
+	tcpListener net.Listener
+	logCallback func(string)
+}
+
+// NewTCPRelay 创建一个新的UDP中继实例
+func NewTCPRelay(listenPort int, logCallback func(string)) (*TCPRelay, error) {
+	// 创建TCP服务器
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", listenPort))
+	if err != nil {
+		return nil, err
+	}
+	r := &TCPRelay{
+		tcpListener: listener,
+		logCallback: logCallback,
+	}
+	// 处理客户端连接
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				if !strings.Contains(err.Error(), "use of closed network connection") {
+					r.logCallback(fmt.Sprintf("错误：接受连接错误: %v", err))
+				}
+				return
+			}
+
+			go r.handleTCPClient(conn)
+		}
+	}()
+
+	return r, nil
+}
+
+// Stop 停止TCP中继服务器
+func (r *TCPRelay) Stop() {
+	if r.tcpListener != nil {
+		r.tcpListener.Close()
+	}
+	r.logCallback("TCP中继服务器已停止")
+}
+
+// handleMessages 处理接收到的TCP消息
+func (r *TCPRelay) handleTCPClient(conn net.Conn) {
+	defer conn.Close()
+
+	clientAddr := conn.RemoteAddr().String()
+	r.logCallback(fmt.Sprintf("信息：TCP客户端连接: %s", clientAddr))
+
+	// 准备要发送的数据
+	message := "Hello!"
+	messageBytes := []byte(message)
+	messageLen := len(messageBytes)
+
+	// 创建数据包：1字节消息ID + 4字节长度 + 字符串内容
+	data := make([]byte, 1+4+messageLen)
+
+	// 第一个字节为消息ID 0
+	data[0] = 0
+
+	// 接下来4个字节为字符串长度（大端序）
+	data[1] = byte(messageLen >> 24)
+	data[2] = byte(messageLen >> 16)
+	data[3] = byte(messageLen >> 8)
+	data[4] = byte(messageLen)
+
+	// 最后是字符串内容
+	copy(data[5:], messageBytes)
+
+	// 发送数据包
+	_, err := conn.Write(data)
+	if err != nil {
+		r.logCallback(fmt.Sprintf("错误：发送数据到TCP客户端 %s 失败: %v", clientAddr, err))
+		return
+	}
+}
+
 // GUI应用程序结构
 type UDPRelayApp struct {
 	app           fyne.App
 	window        fyne.Window
-	relay         *UDPRelay
-	statusLabel   *widget.Label
+	udpRelay      *UDPRelay
+	tcpRelay      *TCPRelay
 	logText       *widget.Entry
 	startBtn      *widget.Button
 	stopBtn       *widget.Button
+	connectBtn    *widget.Button
+	disconnectBtn *widget.Button
 	configManager *ConfigManager
 	// 玩家列表控件
 	playerTable *widget.Table
 	// 玩家列表
 	players      []*Player
 	playersMutex sync.RWMutex
-}
-
-// 在应用程序退出时关闭配置管理器
-func (ua *UDPRelayApp) Cleanup() {
-	if ua.configManager != nil {
-		ua.configManager.Close()
-	}
 }
 
 // NewUDPRelayApp 创建新的GUI应用程序
@@ -376,77 +453,65 @@ func (ua *UDPRelayApp) createUI() {
 
 	listenPortEntry.SetPlaceHolder("监听端口")
 	targetHostEntry.SetPlaceHolder("目标主机")
-	targetPortEntry.SetPlaceHolder("目标端口")
+	targetPortEntry.SetPlaceHolder("游戏端口")
 
 	// 主机模式按钮
-	ua.startBtn = widget.NewButton("启动服务器", nil)
-	ua.stopBtn = widget.NewButton("停止服务器", nil)
-	ua.stopBtn.Disable()
-
-	// 客机模式按钮
-	connectBtn := widget.NewButton("连接服务器", nil)
-	disconnectBtn := widget.NewButton("断开服务器", nil)
-	disconnectBtn.Disable()
-
-	clearBtn := widget.NewButton("清空日志", func() {
-		ua.logText.SetText("")
-	})
-
-	// 按钮事件处理
-	ua.startBtn.OnTapped = func() {
+	ua.startBtn = widget.NewButton("启动服务器", func() {
 		listenPort, err := strconv.Atoi(listenPortEntry.Text)
 		if err != nil || listenPort < 1 || listenPort > 65535 {
 			ua.appendLog("错误: 监听端口必须是 1-65535 之间的数字")
 			return
 		}
 
-		targetHost := strings.TrimSpace(targetHostEntry.Text)
-		if targetHost == "" {
-			ua.appendLog("错误: 请输入目标主机地址")
-			return
-		}
-
-		targetPort, err := strconv.Atoi(targetPortEntry.Text)
-		if err != nil || targetPort < 1 || targetPort > 65535 {
-			ua.appendLog("错误: 目标端口必须是 1-65535 之间的数字")
-			return
-		}
-
-		// 创建中继服务器实例
-		ua.relay = NewUDPRelay(listenPort, targetHost, targetPort, ua.appendLog)
-
-		// 启动服务器
-		err = ua.relay.Start()
+		ua.tcpRelay, err = NewTCPRelay(listenPort, func(s string) {
+			fyne.Do(func() {
+				ua.appendLog(s)
+			})
+		})
 		if err != nil {
-			ua.appendLog(fmt.Sprintf("启动失败: %v", err))
+			ua.appendLog(fmt.Sprintf("启动TCP服务器失败: %v", err))
 			return
 		}
 
-		ua.statusLabel.SetText(fmt.Sprintf("状态: 运行中 - 监听 :%d -> %s:%d",
-			listenPort, targetHost, targetPort))
+		ua.appendLog(fmt.Sprintf("信息：TCP服务器启动成功，监听端口 %d", listenPort))
+
 		ua.startBtn.Disable()
 		ua.stopBtn.Enable()
 		listenPortEntry.Disable()
 		targetHostEntry.Disable()
 		targetPortEntry.Disable()
-	}
+	})
 
-	ua.stopBtn.OnTapped = func() {
-		if ua.relay != nil {
-			ua.relay.Stop()
-			ua.relay = nil
+	ua.stopBtn = widget.NewButton("停止服务器", func() {
+		if ua.udpRelay != nil {
+			ua.udpRelay.Stop()
+			ua.udpRelay = nil
 		}
 
-		ua.statusLabel.SetText("状态: 已停止")
+		if ua.tcpRelay != nil {
+			ua.tcpRelay.Stop()
+			ua.tcpRelay = nil
+		}
+
 		ua.startBtn.Enable()
 		ua.stopBtn.Disable()
 		listenPortEntry.Enable()
 		targetHostEntry.Enable()
 		targetPortEntry.Enable()
-	}
+	})
+	ua.stopBtn.Disable()
+
+	// 客机模式按钮
+	ua.connectBtn = widget.NewButton("连接服务器", nil)
+	ua.disconnectBtn = widget.NewButton("断开服务器", nil)
+	ua.disconnectBtn.Disable()
+
+	clearBtn := widget.NewButton("清空日志", func() {
+		ua.logText.SetText("")
+	})
 
 	// 客机模式按钮事件处理（暂时为空实现）
-	connectBtn.OnTapped = func() {
+	ua.connectBtn.OnTapped = func() {
 		targetHost := strings.TrimSpace(targetHostEntry.Text)
 		if targetHost == "" {
 			ua.appendLog("错误: 请输入目标主机地址")
@@ -461,26 +526,20 @@ func (ua *UDPRelayApp) createUI() {
 
 		// TODO: 实现客机连接逻辑
 		ua.appendLog(fmt.Sprintf("连接到服务器 %s:%d", targetHost, targetPort))
-		ua.statusLabel.SetText(fmt.Sprintf("状态: 已连接到 %s:%d", targetHost, targetPort))
-		connectBtn.Disable()
-		disconnectBtn.Enable()
+		ua.connectBtn.Disable()
+		ua.disconnectBtn.Enable()
 		targetHostEntry.Disable()
 		targetPortEntry.Disable()
 	}
 
-	disconnectBtn.OnTapped = func() {
+	ua.disconnectBtn.OnTapped = func() {
 		// TODO: 实现客机断开逻辑
 		ua.appendLog("断开服务器连接")
-		ua.statusLabel.SetText("状态: 已断开")
-		connectBtn.Enable()
-		disconnectBtn.Disable()
+		ua.connectBtn.Enable()
+		ua.disconnectBtn.Disable()
 		targetHostEntry.Enable()
 		targetPortEntry.Enable()
 	}
-
-	// 状态标签
-	ua.statusLabel = widget.NewLabel("状态: 未启动")
-	ua.statusLabel.Alignment = fyne.TextAlignCenter
 
 	// 创建玩家列表表格
 	ua.createPlayerTable()
@@ -489,13 +548,13 @@ func (ua *UDPRelayApp) createUI() {
 
 	// 日志区域
 	ua.logText = widget.NewMultiLineEntry()
-	ua.logText.SetPlaceHolder("日志将显示在这里...")
+	ua.logText.SetText("日志将显示在这里...")
 	ua.logText.Disable()
 
 	// 主机模式的内容
 	hostContent := container.NewVBox(
 		container.NewBorder(nil, nil, widget.NewLabel("监听端口"), nil, listenPortEntry),
-		container.NewBorder(nil, nil, widget.NewLabel("目标端口"), nil, targetPortEntry),
+		container.NewBorder(nil, nil, widget.NewLabel("游戏端口"), nil, targetPortEntry),
 		container.NewHBox(ua.startBtn, ua.stopBtn),
 	)
 
@@ -503,7 +562,7 @@ func (ua *UDPRelayApp) createUI() {
 	clientContent := container.NewVBox(
 		container.NewBorder(nil, nil, widget.NewLabel("目标主机"), nil, targetHostEntry),
 		layout.NewSpacer(),
-		container.NewHBox(connectBtn, disconnectBtn),
+		container.NewHBox(ua.connectBtn, ua.disconnectBtn),
 	)
 
 	// 创建Tab容器
@@ -535,7 +594,6 @@ func (ua *UDPRelayApp) createUI() {
 	)
 
 	statusBox := container.NewVBox(
-		ua.statusLabel,
 		buttonRow,
 	)
 
@@ -714,6 +772,13 @@ func (ua *UDPRelayApp) restoreWindowState() {
 	width, _ := strconv.Atoi(ua.configManager.GetConfig("window_width", "1024"))
 	height, _ := strconv.Atoi(ua.configManager.GetConfig("window_height", "768"))
 	ua.window.Resize(fyne.NewSize(float32(width), float32(height)))
+}
+
+// 在应用程序退出时关闭配置管理器
+func (ua *UDPRelayApp) Cleanup() {
+	if ua.configManager != nil {
+		ua.configManager.Close()
+	}
 }
 
 func main() {
