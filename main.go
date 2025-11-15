@@ -303,20 +303,20 @@ func (r *UDPRelay) log(message string) {
 	}
 }
 
-// TCPRelay 表示一个TCP中继服务器
-type TCPRelay struct {
+// TCPServiceRelay 表示一个TCP服务器
+type TCPServiceRelay struct {
 	tcpListener net.Listener
 	logCallback func(string)
 }
 
-// NewTCPRelay 创建一个新的UDP中继实例
-func NewTCPRelay(listenPort int, logCallback func(string)) (*TCPRelay, error) {
+// NewTCPServiceRelay 创建一个新的TCP服务器实例
+func NewTCPServiceRelay(listenPort int, logCallback func(string)) (*TCPServiceRelay, error) {
 	// 创建TCP服务器
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", listenPort))
 	if err != nil {
 		return nil, err
 	}
-	r := &TCPRelay{
+	r := &TCPServiceRelay{
 		tcpListener: listener,
 		logCallback: logCallback,
 	}
@@ -339,7 +339,7 @@ func NewTCPRelay(listenPort int, logCallback func(string)) (*TCPRelay, error) {
 }
 
 // Stop 停止TCP中继服务器
-func (r *TCPRelay) Stop() {
+func (r *TCPServiceRelay) Stop() {
 	if r.tcpListener != nil {
 		r.tcpListener.Close()
 	}
@@ -347,7 +347,7 @@ func (r *TCPRelay) Stop() {
 }
 
 // handleMessages 处理接收到的TCP消息
-func (r *TCPRelay) handleTCPClient(conn net.Conn) {
+func (r *TCPServiceRelay) handleTCPClient(conn net.Conn) {
 	defer conn.Close()
 
 	clientAddr := conn.RemoteAddr().String()
@@ -381,18 +381,100 @@ func (r *TCPRelay) handleTCPClient(conn net.Conn) {
 	}
 }
 
+// TCPClientRelay 表示一个TCP客户端
+type TCPClientRelay struct {
+	tcpConnection net.Conn
+	logCallback   func(string)
+}
+
+// NewTCPClientRelay 创建一个新的TCP客户端实例
+func NewTCPClientRelay(targetHost string, logCallback func(string)) (*TCPClientRelay, error) {
+	// 创建TCP客户端
+	conn, err := net.Dial("tcp", targetHost)
+	if err != nil {
+		logCallback(fmt.Sprintf("连接失败: %v", err))
+		return nil, err
+	}
+	r := &TCPClientRelay{
+		tcpConnection: conn,
+		logCallback:   logCallback,
+	}
+
+	// 处理TCP客户端接收数据
+	go r.handleTCPClientData(conn)
+	return r, nil
+}
+
+// 处理TCP客户端接收数据
+func (r *TCPClientRelay) handleTCPClientData(conn net.Conn) {
+	defer conn.Close()
+
+	buffer := make([]byte, 4096)
+
+	for {
+		n, err := conn.Read(buffer)
+		if err != nil {
+			if !strings.Contains(err.Error(), "use of closed network connection") {
+				r.logCallback(fmt.Sprintf("TCP客户端接收错误: %v", err))
+			}
+			break
+		}
+
+		if n > 0 {
+			// 第一个字节为消息id
+			messageID := buffer[0]
+			data := buffer[1:n]
+			// r.logCallback(fmt.Sprintf("收到消息 ID: %d, 数据长度: %d 字节", messageID, len(data)))
+
+			// 根据不同的消息ID进行不同处理
+			switch messageID {
+			case 0:
+				// 处理消息ID为0的数据
+				r.handleMessageID0(data)
+			case 1:
+				// 处理消息ID为1的数据
+				r.handleMessageID1(data)
+			default:
+				r.logCallback(fmt.Sprintf("错误：未知消息ID: %d", messageID))
+			}
+		}
+	}
+	r.logCallback("信息：TCP客户端连接已断开")
+}
+
+// 处理消息ID为0的数据
+func (r *TCPClientRelay) handleMessageID0(data []byte) {
+	// 消息ID 0 是字符串消息
+	if len(data) >= 4 {
+		// 读取长度字段（大端序）
+		messageLen := int(uint32(data[0])<<24 | uint32(data[1])<<16 | uint32(data[2])<<8 | uint32(data[3]))
+		if len(data) >= 4+messageLen {
+			message := string(data[4 : 4+messageLen])
+			r.logCallback(fmt.Sprintf("消息0内容: %s", message))
+		}
+	} else {
+		r.logCallback("错误：消息ID0数据长度不足4字节")
+	}
+}
+
+// 处理消息ID为1的数据
+func (r *TCPClientRelay) handleMessageID1(data []byte) {
+	// 处理其他类型的消息
+	r.logCallback(fmt.Sprintf("收到消息1，数据长度: %d", len(data)))
+}
+
 // GUI应用程序结构
 type UDPRelayApp struct {
-	app           fyne.App
-	window        fyne.Window
-	udpRelay      *UDPRelay
-	tcpRelay      *TCPRelay
-	logText       *widget.Entry
-	startBtn      *widget.Button
-	stopBtn       *widget.Button
-	connectBtn    *widget.Button
-	disconnectBtn *widget.Button
-	configManager *ConfigManager
+	app             fyne.App
+	window          fyne.Window
+	udpRelay        *UDPRelay
+	tcpServiceRelay *TCPServiceRelay
+	logText         *widget.Entry
+	startBtn        *widget.Button
+	stopBtn         *widget.Button
+	connectBtn      *widget.Button
+	disconnectBtn   *widget.Button
+	configManager   *ConfigManager
 	// 玩家列表控件
 	playerTable *widget.Table
 	// 玩家列表
@@ -463,7 +545,7 @@ func (ua *UDPRelayApp) createUI() {
 			return
 		}
 
-		ua.tcpRelay, err = NewTCPRelay(listenPort, func(s string) {
+		ua.tcpServiceRelay, err = NewTCPServiceRelay(listenPort, func(s string) {
 			fyne.Do(func() {
 				ua.appendLog(s)
 			})
@@ -488,9 +570,9 @@ func (ua *UDPRelayApp) createUI() {
 			ua.udpRelay = nil
 		}
 
-		if ua.tcpRelay != nil {
-			ua.tcpRelay.Stop()
-			ua.tcpRelay = nil
+		if ua.tcpServiceRelay != nil {
+			ua.tcpServiceRelay.Stop()
+			ua.tcpServiceRelay = nil
 		}
 
 		ua.startBtn.Enable()
@@ -518,14 +600,8 @@ func (ua *UDPRelayApp) createUI() {
 			return
 		}
 
-		targetPort, err := strconv.Atoi(targetPortEntry.Text)
-		if err != nil || targetPort < 1 || targetPort > 65535 {
-			ua.appendLog("错误: 目标端口必须是 1-65535 之间的数字")
-			return
-		}
-
 		// TODO: 实现客机连接逻辑
-		ua.appendLog(fmt.Sprintf("连接到服务器 %s:%d", targetHost, targetPort))
+		ua.appendLog(fmt.Sprintf("连接到服务器 %s", targetHost))
 		ua.connectBtn.Disable()
 		ua.disconnectBtn.Enable()
 		targetHostEntry.Disable()
