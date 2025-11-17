@@ -1,4 +1,4 @@
-package net
+package tcp
 
 import (
 	"fmt"
@@ -6,24 +6,19 @@ import (
 
 	"github.com/1143910315/UDPRelayServer/net/packer"
 	"github.com/DarthPestilane/easytcp"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
-var log *logrus.Logger
-
-func init() {
-	log = logrus.New()
-	log.SetLevel(logrus.DebugLevel)
-}
-
 // TCPServer TCP服务器组件
 type TCPServer struct {
-	srv       *easytcp.Server
-	sessions  map[string]easytcp.Session // 保存活跃会话
-	mu        sync.RWMutex
-	isRunning bool
-	wg        sync.WaitGroup
+	srv                  *easytcp.Server
+	sessions             map[string]easytcp.Session // 保存活跃会话
+	mu                   sync.RWMutex
+	isRunning            bool
+	wg                   sync.WaitGroup
+	OnClientConnected    func(sessionID string)      // 客户端连接事件回调
+	OnClientDisconnected func(sessionID string)      // 客户端断开事件回调
+	OnLog                func(level, message string) // 日志事件回调
 }
 
 // NewTCPServer 创建新的TCP服务器实例
@@ -58,11 +53,9 @@ func (ts *TCPServer) Start(address string) error {
 	go func() {
 		defer ts.wg.Done()
 		if err := ts.srv.Run(address); err != nil {
-			log.Errorf("serve err: %s", err)
+			ts.log("ERROR", fmt.Sprintf("服务器错误: %s", err))
 		}
 	}()
-
-	log.Info("TCP server started")
 	return nil
 }
 
@@ -82,8 +75,6 @@ func (ts *TCPServer) Stop() {
 	ts.mu.Lock()
 	ts.sessions = make(map[string]easytcp.Session)
 	ts.mu.Unlock()
-
-	log.Info("TCP server stopped")
 }
 
 // IsRunning 检查服务器是否在运行
@@ -174,13 +165,13 @@ func (ts *TCPServer) logTransmission(req, resp proto.Message) easytcp.Middleware
 	return func(next easytcp.HandlerFunc) easytcp.HandlerFunc {
 		return func(c easytcp.Context) {
 			if err := c.Bind(req); err == nil {
-				log.Debugf("recv | id: %d; size: %d; data: %s", c.Request().ID(), len(c.Request().Data()), req)
+				//log.Debugf("recv | id: %d; size: %d; data: %s", c.Request().ID(), len(c.Request().Data()), req)
 			}
 			defer func() {
 				respMsg := c.Response()
 				if respMsg != nil {
 					_ = c.Session().Codec().Decode(respMsg.Data(), resp)
-					log.Infof("send | id: %d; size: %d; data: %s", respMsg.ID(), len(respMsg.Data()), resp)
+					//log.Infof("send | id: %d; size: %d; data: %s", respMsg.ID(), len(respMsg.Data()), resp)
 				}
 			}()
 			next(c)
@@ -192,23 +183,38 @@ func (ts *TCPServer) logTransmission(req, resp proto.Message) easytcp.Middleware
 func (ts *TCPServer) onSessionCreate(session easytcp.Session) {
 	sessionID := session.ID()
 	ts.mu.Lock()
-	//ts.sessions[sessionID] = session
+	ts.sessions[sessionID.(string)] = session
 	ts.mu.Unlock()
-	log.Infof("session created: %s", sessionID)
+
+	// 触发客户端连接事件
+	if ts.OnClientConnected != nil {
+		ts.OnClientConnected(sessionID.(string))
+	}
 }
 
 // 会话关闭回调
 func (ts *TCPServer) onSessionClose(session easytcp.Session) {
 	sessionID := session.ID()
 	ts.mu.Lock()
-	//delete(ts.sessions, sessionID)
+	delete(ts.sessions, sessionID.(string))
 	ts.mu.Unlock()
-	log.Infof("session closed: %s", sessionID)
+
+	// 触发客户端断开事件
+	if ts.OnClientDisconnected != nil {
+		ts.OnClientDisconnected(sessionID.(string))
+	}
 }
 
 // 添加自定义路由
 func (ts *TCPServer) AddRoute(msgID int, handler easytcp.HandlerFunc, middlewares ...easytcp.MiddlewareFunc) {
 	if ts.srv != nil {
 		ts.srv.AddRoute(msgID, handler, middlewares...)
+	}
+}
+
+// log 内部日志记录方法
+func (ts *TCPServer) log(level, message string) {
+	if ts.OnLog != nil {
+		ts.OnLog(level, message)
 	}
 }

@@ -1,4 +1,4 @@
-package net
+package tcp
 
 import (
 	"fmt"
