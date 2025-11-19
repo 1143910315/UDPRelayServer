@@ -24,6 +24,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/1143910315/UDPRelayServer/net/tcp"
+	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -99,7 +100,7 @@ func NewConfigManager() (*ConfigManager, error) {
 	// 创建密钥表
 	createKeyTableSQL := `
 	CREATE TABLE IF NOT EXISTS key_pairs (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		id INTEGER PRIMARY KEY,
 		service_id TEXT NOT NULL UNIQUE,
 		private_key TEXT NOT NULL,
 		public_key TEXT NOT NULL
@@ -399,15 +400,33 @@ func DecryptWithPrivateKey(privateKeyPEM string, encrypted []byte) ([]byte, erro
 	return decrypted, nil
 }
 
-// 保存密钥对到数据库
-func (cm *ConfigManager) SaveKeyPair(serviceId, privateKey, publicKey string) error {
-	cm.mutex.Lock()
-	defer cm.mutex.Unlock()
+// 生成密钥对并插入数据库，最多尝试三次
+func (cm *ConfigManager) insertKeyPair(id int) (string, string, string, error) {
+	for range 3 {
+		publicKey, privateKey, err := GenerateKeyPair()
+		if err != nil {
+			return "", "", "", err
+		}
 
-	_, err := cm.db.Exec(`
-		INSERT OR REPLACE INTO key_pairs (service_id, private_key, public_key) 
-		VALUES (?, ?, ?)`, serviceId, privateKey, publicKey)
-	return err
+		serviceId, err := uuid.NewUUID()
+		if err != nil {
+			return "", "", "", err
+		}
+
+		_, err = cm.db.Exec(`
+            INSERT INTO key_pairs (id, service_id, private_key, public_key) 
+            VALUES (?, ?, ?, ?)`, id, serviceId.String(), privateKey, publicKey)
+		if err != nil {
+			if strings.Contains(err.Error(), "UNIQUE constraint") {
+				// service_id 重复，继续重试
+				continue
+			}
+			return "", "", "", err
+		}
+
+		return serviceId.String(), privateKey, publicKey, nil
+	}
+	return "", "", "", errors.New("插入密钥对失败，已达到最大重试次数")
 }
 
 // 从数据库获取密钥对
@@ -419,6 +438,10 @@ func (cm *ConfigManager) GetKeyPairByID(id int) (string, string, string, error) 
 	err := cm.db.QueryRow("SELECT service_id, private_key, public_key FROM key_pairs WHERE id = ?", id).
 		Scan(&serviceId, &privateKey, &publicKey)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			// 数据不存在，插入新数据
+			return cm.insertKeyPair(id)
+		}
 		return "", "", "", err
 	}
 	return serviceId, privateKey, publicKey, nil
@@ -530,6 +553,8 @@ func (ua *UDPRelayApp) createUI() {
 				ua.appendLog(fmt.Sprintf("客户端连接: %s", sessionID))
 				ua.refreshPlayerTableForRow(playersSize) // 刷新表格显示
 			})
+			ua.configManager.GetKeyPairByID(0)
+			//ua.tcpService.SendToSession(sessionID,i)
 		}
 		err = ua.tcpService.Start(":" + listenAddress)
 		if err != nil {
@@ -803,7 +828,6 @@ func (ua *UDPRelayApp) calculateDownloadSpeed(player *Player) float64 {
 func (ua *UDPRelayApp) refreshPlayerTable() {
 	if ua.playerTable != nil {
 		ua.playerTable.Refresh()
-		// ua.playerTable.UpdateCell
 	}
 }
 
