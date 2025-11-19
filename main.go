@@ -1,7 +1,13 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"database/sql"
+	"encoding/pem"
+	"errors"
 	"fmt"
 	"image/color"
 	"net"
@@ -51,6 +57,7 @@ func (c CustomTheme) Size(name fyne.ThemeSizeName) float32 {
 
 // 玩家结构体
 type Player struct {
+	sessionID         string
 	ID                string
 	Remark            string
 	Port              int
@@ -85,6 +92,20 @@ func NewConfigManager() (*ConfigManager, error) {
     );`
 
 	_, err = db.Exec(createTableSQL)
+	if err != nil {
+		return nil, err
+	}
+
+	// 创建密钥表
+	createKeyTableSQL := `
+	CREATE TABLE IF NOT EXISTS key_pairs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		service_id TEXT NOT NULL UNIQUE,
+		private_key TEXT NOT NULL,
+		public_key TEXT NOT NULL
+	);`
+
+	_, err = db.Exec(createKeyTableSQL)
 	if err != nil {
 		return nil, err
 	}
@@ -304,6 +325,105 @@ func (r *UDPRelay) log(message string) {
 	}
 }
 
+// 生成RSA密钥对
+func GenerateKeyPair() (string, string, error) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return "", "", err
+	}
+
+	// 编码私钥为PEM格式
+	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privateKeyBytes,
+	})
+
+	// 编码公钥为PEM格式
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	if err != nil {
+		return "", "", err
+	}
+	publicKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PUBLIC KEY",
+		Bytes: publicKeyBytes,
+	})
+
+	return string(publicKeyPEM), string(privateKeyPEM), nil
+}
+
+// 使用公钥加密数据
+func EncryptWithPublicKey(publicKeyPEM string, data []byte) ([]byte, error) {
+	block, _ := pem.Decode([]byte(publicKeyPEM))
+	if block == nil {
+		return nil, errors.New("failed to parse PEM block containing the public key")
+	}
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	rsaPub, ok := pub.(*rsa.PublicKey)
+	if !ok {
+		return nil, errors.New("not an RSA public key")
+	}
+
+	// 使用OAEP加密
+	encrypted, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, rsaPub, data, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return encrypted, nil
+}
+
+// 使用私钥解密数据
+func DecryptWithPrivateKey(privateKeyPEM string, encrypted []byte) ([]byte, error) {
+	block, _ := pem.Decode([]byte(privateKeyPEM))
+	if block == nil {
+		return nil, errors.New("failed to parse PEM block containing the private key")
+	}
+
+	priv, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	// 使用OAEP解密
+	decrypted, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, priv, encrypted, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return decrypted, nil
+}
+
+// 保存密钥对到数据库
+func (cm *ConfigManager) SaveKeyPair(serviceId, privateKey, publicKey string) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	_, err := cm.db.Exec(`
+		INSERT OR REPLACE INTO key_pairs (service_id, private_key, public_key) 
+		VALUES (?, ?, ?)`, serviceId, privateKey, publicKey)
+	return err
+}
+
+// 从数据库获取密钥对
+func (cm *ConfigManager) GetKeyPairByID(id int) (string, string, string, error) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+
+	var serviceId, privateKey, publicKey string
+	err := cm.db.QueryRow("SELECT service_id, private_key, public_key FROM key_pairs WHERE id = ?", id).
+		Scan(&serviceId, &privateKey, &publicKey)
+	if err != nil {
+		return "", "", "", err
+	}
+	return serviceId, privateKey, publicKey, nil
+}
+
 // GUI应用程序结构
 type UDPRelayApp struct {
 	app           fyne.App
@@ -390,7 +510,26 @@ func (ua *UDPRelayApp) createUI() {
 
 		ua.tcpService = tcp.NewTCPServer()
 		ua.tcpService.OnClientConnected = func(sessionID string) {
+			ua.playersMutex.Lock()
+			defer ua.playersMutex.Unlock()
 
+			ua.players = append(ua.players, &Player{
+				sessionID:         sessionID,
+				ID:                "",
+				Remark:            "", // 初始备注为空
+				Port:              0,  // 初始端口为0，后续可更新
+				TotalUpload:       0,
+				TotalDownload:     0,
+				LastUpload:        0,
+				LastDownload:      0,
+				Ping:              0,
+				LastSpeedCalcTime: time.Now(),
+			})
+			playersSize := len(ua.players)
+			fyne.Do(func() {
+				ua.appendLog(fmt.Sprintf("客户端连接: %s", sessionID))
+				ua.refreshPlayerTableForRow(playersSize) // 刷新表格显示
+			})
 		}
 		err = ua.tcpService.Start(":" + listenAddress)
 		if err != nil {
@@ -569,10 +708,10 @@ func (ua *UDPRelayApp) createPlayerTable() {
 		func() (int, int) {
 			ua.playersMutex.RLock()
 			defer ua.playersMutex.RUnlock()
-			return len(ua.players) + 1, 5 // 行数(玩家数+表头)，列数
+			return len(ua.players) + 2, 5 // 行数(玩家数+表头)，列数
 		},
 		func() fyne.CanvasObject {
-			return widget.NewLabel("模板文本")
+			return widget.NewLabel("")
 		},
 		func(tci widget.TableCellID, co fyne.CanvasObject) {
 			label := co.(*widget.Label)
@@ -664,6 +803,18 @@ func (ua *UDPRelayApp) calculateDownloadSpeed(player *Player) float64 {
 func (ua *UDPRelayApp) refreshPlayerTable() {
 	if ua.playerTable != nil {
 		ua.playerTable.Refresh()
+		// ua.playerTable.UpdateCell
+	}
+}
+
+// 更新玩家表格显示
+func (ua *UDPRelayApp) refreshPlayerTableForRow(row int) {
+	if ua.playerTable != nil {
+		ua.playerTable.RefreshItem(widget.TableCellID{Row: row, Col: 0})
+		ua.playerTable.RefreshItem(widget.TableCellID{Row: row, Col: 1})
+		ua.playerTable.RefreshItem(widget.TableCellID{Row: row, Col: 2})
+		ua.playerTable.RefreshItem(widget.TableCellID{Row: row, Col: 3})
+		ua.playerTable.RefreshItem(widget.TableCellID{Row: row, Col: 4})
 	}
 }
 
