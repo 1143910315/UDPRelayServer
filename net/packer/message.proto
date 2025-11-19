@@ -5,16 +5,55 @@ package packer;
 option go_package = '/packer';
 
 enum ID {
-  _ = 0;
-  FooReqID = 1;
-  FooRespID = 2;
+  AllUserInfoPackageID = 0;
+  AuthenticationIdPackageID = 1;
+  BindPortPackageID = 2;
+  ConfirmRegisterPackageID = 3;
+  DeviceIdPackageID = 4;
+  ForwardPackageID = 5;
+  ServiceIdPackageID = 6;
+  SwitchServiceIdPackageID = 7;
 }
 
-message FooReq {
-  string Bar = 1;
-  int32 Buz = 2;
+message AllUserInfoPackage {
+  message UserData {
+    string device_id = 1;
+    int32 port = 2;
+  }
+  
+  repeated UserData user_data_list = 1;
 }
-message FooResp {
-  int32 Code = 1;
-  string Message = 2;
+
+message AuthenticationIdPackage {
+  int32 index = 1;
+  string device_id = 2;
+  string authentication_id = 3;
+}
+
+message BindPortPackage {
+  int32 port = 1;
+}
+
+message ConfirmRegisterPackage {
+  string device_id = 1;
+  string authentication_id = 2;
+}
+
+message DeviceIdPackage {
+  string device_id = 1;
+}
+
+message ForwardPackage {
+  int32 port = 1;
+  bytes bytes = 2;
+}
+
+message ServiceIdPackage {
+  int32 index = 1;
+  string service_id = 2;
+  string public_key = 3;
+}
+
+message SwitchServiceIdPackage {
+  int32 index = 1;
 }

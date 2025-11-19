@@ -24,22 +24,37 @@ const (
 type ID int32
 
 const (
-	ID__         ID = 0
-	ID_FooReqID  ID = 1
-	ID_FooRespID ID = 2
+	ID_AllUserInfoPackageID      ID = 0
+	ID_AuthenticationIdPackageID ID = 1
+	ID_BindPortPackageID         ID = 2
+	ID_ConfirmRegisterPackageID  ID = 3
+	ID_DeviceIdPackageID         ID = 4
+	ID_ForwardPackageID          ID = 5
+	ID_ServiceIdPackageID        ID = 6
+	ID_SwitchServiceIdPackageID  ID = 7
 )
 
 // Enum value maps for ID.
 var (
 	ID_name = map[int32]string{
-		0: "_",
-		1: "FooReqID",
-		2: "FooRespID",
+		0: "AllUserInfoPackageID",
+		1: "AuthenticationIdPackageID",
+		2: "BindPortPackageID",
+		3: "ConfirmRegisterPackageID",
+		4: "DeviceIdPackageID",
+		5: "ForwardPackageID",
+		6: "ServiceIdPackageID",
+		7: "SwitchServiceIdPackageID",
 	}
 	ID_value = map[string]int32{
-		"_":         0,
-		"FooReqID":  1,
-		"FooRespID": 2,
+		"AllUserInfoPackageID":      0,
+		"AuthenticationIdPackageID": 1,
+		"BindPortPackageID":         2,
+		"ConfirmRegisterPackageID":  3,
+		"DeviceIdPackageID":         4,
+		"ForwardPackageID":          5,
+		"ServiceIdPackageID":        6,
+		"SwitchServiceIdPackageID":  7,
 	}
 )
 
@@ -70,28 +85,27 @@ func (ID) EnumDescriptor() ([]byte, []int) {
 	return file_message_proto_rawDescGZIP(), []int{0}
 }
 
-type FooReq struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bar           string                 `protobuf:"bytes,1,opt,name=Bar,proto3" json:"Bar,omitempty"`
-	Buz           int32                  `protobuf:"varint,2,opt,name=Buz,proto3" json:"Buz,omitempty"`
+type AllUserInfoPackage struct {
+	state         protoimpl.MessageState         `protogen:"open.v1"`
+	UserDataList  []*AllUserInfoPackage_UserData `protobuf:"bytes,1,rep,name=user_data_list,json=userDataList,proto3" json:"user_data_list,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *FooReq) Reset() {
-	*x = FooReq{}
+func (x *AllUserInfoPackage) Reset() {
+	*x = AllUserInfoPackage{}
 	mi := &file_message_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *FooReq) String() string {
+func (x *AllUserInfoPackage) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*FooReq) ProtoMessage() {}
+func (*AllUserInfoPackage) ProtoMessage() {}
 
-func (x *FooReq) ProtoReflect() protoreflect.Message {
+func (x *AllUserInfoPackage) ProtoReflect() protoreflect.Message {
 	mi := &file_message_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -103,47 +117,41 @@ func (x *FooReq) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use FooReq.ProtoReflect.Descriptor instead.
-func (*FooReq) Descriptor() ([]byte, []int) {
+// Deprecated: Use AllUserInfoPackage.ProtoReflect.Descriptor instead.
+func (*AllUserInfoPackage) Descriptor() ([]byte, []int) {
 	return file_message_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *FooReq) GetBar() string {
+func (x *AllUserInfoPackage) GetUserDataList() []*AllUserInfoPackage_UserData {
 	if x != nil {
-		return x.Bar
+		return x.UserDataList
 	}
-	return ""
+	return nil
 }
 
-func (x *FooReq) GetBuz() int32 {
-	if x != nil {
-		return x.Buz
-	}
-	return 0
+type AuthenticationIdPackage struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Index            int32                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	DeviceId         string                 `protobuf:"bytes,2,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	AuthenticationId string                 `protobuf:"bytes,3,opt,name=authentication_id,json=authenticationId,proto3" json:"authentication_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
-type FooResp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          int32                  `protobuf:"varint,1,opt,name=Code,proto3" json:"Code,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=Message,proto3" json:"Message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FooResp) Reset() {
-	*x = FooResp{}
+func (x *AuthenticationIdPackage) Reset() {
+	*x = AuthenticationIdPackage{}
 	mi := &file_message_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *FooResp) String() string {
+func (x *AuthenticationIdPackage) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*FooResp) ProtoMessage() {}
+func (*AuthenticationIdPackage) ProtoMessage() {}
 
-func (x *FooResp) ProtoReflect() protoreflect.Message {
+func (x *AuthenticationIdPackage) ProtoReflect() protoreflect.Message {
 	mi := &file_message_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -155,40 +163,421 @@ func (x *FooResp) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use FooResp.ProtoReflect.Descriptor instead.
-func (*FooResp) Descriptor() ([]byte, []int) {
+// Deprecated: Use AuthenticationIdPackage.ProtoReflect.Descriptor instead.
+func (*AuthenticationIdPackage) Descriptor() ([]byte, []int) {
 	return file_message_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *FooResp) GetCode() int32 {
+func (x *AuthenticationIdPackage) GetIndex() int32 {
 	if x != nil {
-		return x.Code
+		return x.Index
 	}
 	return 0
 }
 
-func (x *FooResp) GetMessage() string {
+func (x *AuthenticationIdPackage) GetDeviceId() string {
 	if x != nil {
-		return x.Message
+		return x.DeviceId
 	}
 	return ""
+}
+
+func (x *AuthenticationIdPackage) GetAuthenticationId() string {
+	if x != nil {
+		return x.AuthenticationId
+	}
+	return ""
+}
+
+type BindPortPackage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Port          int32                  `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BindPortPackage) Reset() {
+	*x = BindPortPackage{}
+	mi := &file_message_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BindPortPackage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BindPortPackage) ProtoMessage() {}
+
+func (x *BindPortPackage) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BindPortPackage.ProtoReflect.Descriptor instead.
+func (*BindPortPackage) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *BindPortPackage) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+type ConfirmRegisterPackage struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId         string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	AuthenticationId string                 `protobuf:"bytes,2,opt,name=authentication_id,json=authenticationId,proto3" json:"authentication_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ConfirmRegisterPackage) Reset() {
+	*x = ConfirmRegisterPackage{}
+	mi := &file_message_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmRegisterPackage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmRegisterPackage) ProtoMessage() {}
+
+func (x *ConfirmRegisterPackage) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmRegisterPackage.ProtoReflect.Descriptor instead.
+func (*ConfirmRegisterPackage) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ConfirmRegisterPackage) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *ConfirmRegisterPackage) GetAuthenticationId() string {
+	if x != nil {
+		return x.AuthenticationId
+	}
+	return ""
+}
+
+type DeviceIdPackage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId      string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeviceIdPackage) Reset() {
+	*x = DeviceIdPackage{}
+	mi := &file_message_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeviceIdPackage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeviceIdPackage) ProtoMessage() {}
+
+func (x *DeviceIdPackage) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeviceIdPackage.ProtoReflect.Descriptor instead.
+func (*DeviceIdPackage) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *DeviceIdPackage) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+type ForwardPackage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Port          int32                  `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
+	Bytes         []byte                 `protobuf:"bytes,2,opt,name=bytes,proto3" json:"bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ForwardPackage) Reset() {
+	*x = ForwardPackage{}
+	mi := &file_message_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ForwardPackage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ForwardPackage) ProtoMessage() {}
+
+func (x *ForwardPackage) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ForwardPackage.ProtoReflect.Descriptor instead.
+func (*ForwardPackage) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ForwardPackage) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *ForwardPackage) GetBytes() []byte {
+	if x != nil {
+		return x.Bytes
+	}
+	return nil
+}
+
+type ServiceIdPackage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Index         int32                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	ServiceId     string                 `protobuf:"bytes,2,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	PublicKey     string                 `protobuf:"bytes,3,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceIdPackage) Reset() {
+	*x = ServiceIdPackage{}
+	mi := &file_message_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceIdPackage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceIdPackage) ProtoMessage() {}
+
+func (x *ServiceIdPackage) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceIdPackage.ProtoReflect.Descriptor instead.
+func (*ServiceIdPackage) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ServiceIdPackage) GetIndex() int32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *ServiceIdPackage) GetServiceId() string {
+	if x != nil {
+		return x.ServiceId
+	}
+	return ""
+}
+
+func (x *ServiceIdPackage) GetPublicKey() string {
+	if x != nil {
+		return x.PublicKey
+	}
+	return ""
+}
+
+type SwitchServiceIdPackage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Index         int32                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SwitchServiceIdPackage) Reset() {
+	*x = SwitchServiceIdPackage{}
+	mi := &file_message_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SwitchServiceIdPackage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwitchServiceIdPackage) ProtoMessage() {}
+
+func (x *SwitchServiceIdPackage) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwitchServiceIdPackage.ProtoReflect.Descriptor instead.
+func (*SwitchServiceIdPackage) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SwitchServiceIdPackage) GetIndex() int32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+type AllUserInfoPackage_UserData struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId      string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	Port          int32                  `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AllUserInfoPackage_UserData) Reset() {
+	*x = AllUserInfoPackage_UserData{}
+	mi := &file_message_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AllUserInfoPackage_UserData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AllUserInfoPackage_UserData) ProtoMessage() {}
+
+func (x *AllUserInfoPackage_UserData) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AllUserInfoPackage_UserData.ProtoReflect.Descriptor instead.
+func (*AllUserInfoPackage_UserData) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{0, 0}
+}
+
+func (x *AllUserInfoPackage_UserData) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *AllUserInfoPackage_UserData) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
 }
 
 var File_message_proto protoreflect.FileDescriptor
 
 const file_message_proto_rawDesc = "" +
 	"\n" +
-	"\rmessage.proto\x12\x06packer\",\n" +
-	"\x06FooReq\x12\x10\n" +
-	"\x03Bar\x18\x01 \x01(\tR\x03Bar\x12\x10\n" +
-	"\x03Buz\x18\x02 \x01(\x05R\x03Buz\"7\n" +
-	"\aFooResp\x12\x12\n" +
-	"\x04Code\x18\x01 \x01(\x05R\x04Code\x12\x18\n" +
-	"\aMessage\x18\x02 \x01(\tR\aMessage*(\n" +
-	"\x02ID\x12\x05\n" +
-	"\x01_\x10\x00\x12\f\n" +
-	"\bFooReqID\x10\x01\x12\r\n" +
-	"\tFooRespID\x10\x02B\tZ\a/packerb\x06proto3"
+	"\rmessage.proto\x12\x06packer\"\x9c\x01\n" +
+	"\x12AllUserInfoPackage\x12I\n" +
+	"\x0euser_data_list\x18\x01 \x03(\v2#.packer.AllUserInfoPackage.UserDataR\fuserDataList\x1a;\n" +
+	"\bUserData\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x12\n" +
+	"\x04port\x18\x02 \x01(\x05R\x04port\"y\n" +
+	"\x17AuthenticationIdPackage\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\x05R\x05index\x12\x1b\n" +
+	"\tdevice_id\x18\x02 \x01(\tR\bdeviceId\x12+\n" +
+	"\x11authentication_id\x18\x03 \x01(\tR\x10authenticationId\"%\n" +
+	"\x0fBindPortPackage\x12\x12\n" +
+	"\x04port\x18\x01 \x01(\x05R\x04port\"b\n" +
+	"\x16ConfirmRegisterPackage\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12+\n" +
+	"\x11authentication_id\x18\x02 \x01(\tR\x10authenticationId\".\n" +
+	"\x0fDeviceIdPackage\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\":\n" +
+	"\x0eForwardPackage\x12\x12\n" +
+	"\x04port\x18\x01 \x01(\x05R\x04port\x12\x14\n" +
+	"\x05bytes\x18\x02 \x01(\fR\x05bytes\"f\n" +
+	"\x10ServiceIdPackage\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\x05R\x05index\x12\x1d\n" +
+	"\n" +
+	"service_id\x18\x02 \x01(\tR\tserviceId\x12\x1d\n" +
+	"\n" +
+	"public_key\x18\x03 \x01(\tR\tpublicKey\".\n" +
+	"\x16SwitchServiceIdPackage\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\x05R\x05index*\xd5\x01\n" +
+	"\x02ID\x12\x18\n" +
+	"\x14AllUserInfoPackageID\x10\x00\x12\x1d\n" +
+	"\x19AuthenticationIdPackageID\x10\x01\x12\x15\n" +
+	"\x11BindPortPackageID\x10\x02\x12\x1c\n" +
+	"\x18ConfirmRegisterPackageID\x10\x03\x12\x15\n" +
+	"\x11DeviceIdPackageID\x10\x04\x12\x14\n" +
+	"\x10ForwardPackageID\x10\x05\x12\x16\n" +
+	"\x12ServiceIdPackageID\x10\x06\x12\x1c\n" +
+	"\x18SwitchServiceIdPackageID\x10\aB\tZ\a/packerb\x06proto3"
 
 var (
 	file_message_proto_rawDescOnce sync.Once
@@ -203,18 +592,26 @@ func file_message_proto_rawDescGZIP() []byte {
 }
 
 var file_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_message_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_message_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_message_proto_goTypes = []any{
-	(ID)(0),         // 0: packer.ID
-	(*FooReq)(nil),  // 1: packer.FooReq
-	(*FooResp)(nil), // 2: packer.FooResp
+	(ID)(0),                             // 0: packer.ID
+	(*AllUserInfoPackage)(nil),          // 1: packer.AllUserInfoPackage
+	(*AuthenticationIdPackage)(nil),     // 2: packer.AuthenticationIdPackage
+	(*BindPortPackage)(nil),             // 3: packer.BindPortPackage
+	(*ConfirmRegisterPackage)(nil),      // 4: packer.ConfirmRegisterPackage
+	(*DeviceIdPackage)(nil),             // 5: packer.DeviceIdPackage
+	(*ForwardPackage)(nil),              // 6: packer.ForwardPackage
+	(*ServiceIdPackage)(nil),            // 7: packer.ServiceIdPackage
+	(*SwitchServiceIdPackage)(nil),      // 8: packer.SwitchServiceIdPackage
+	(*AllUserInfoPackage_UserData)(nil), // 9: packer.AllUserInfoPackage.UserData
 }
 var file_message_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	9, // 0: packer.AllUserInfoPackage.user_data_list:type_name -> packer.AllUserInfoPackage.UserData
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_message_proto_init() }
@@ -228,7 +625,7 @@ func file_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_message_proto_rawDesc), len(file_message_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   2,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
