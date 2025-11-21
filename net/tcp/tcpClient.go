@@ -8,14 +8,13 @@ import (
 
 	"github.com/1143910315/UDPRelayServer/net/packer"
 	"github.com/DarthPestilane/easytcp"
-	"github.com/sirupsen/logrus"
 )
 
 // TCPClient TCP客户端组件
 type TCPClient struct {
 	conn        net.Conn
 	packer      *packer.LengthWithIdPacker
-	codec       *easytcp.ProtobufCodec
+	Codec       *easytcp.ProtobufCodec
 	isConnected bool
 	mu          sync.RWMutex
 	wg          sync.WaitGroup
@@ -23,7 +22,7 @@ type TCPClient struct {
 	messageChan chan []byte
 	handlers    map[packer.ID]MessageHandler
 	handlerMu   sync.RWMutex
-	log         *logrus.Logger
+	OnLog       func(level, message string) // 日志事件回调
 }
 
 // MessageHandler 消息处理器类型
@@ -33,11 +32,10 @@ type MessageHandler func(*easytcp.Message)
 func NewTCPClient() *TCPClient {
 	return &TCPClient{
 		packer:      &packer.LengthWithIdPacker{},
-		codec:       &easytcp.ProtobufCodec{},
+		Codec:       &easytcp.ProtobufCodec{},
 		stopChan:    make(chan struct{}),
 		messageChan: make(chan []byte, 100),
 		handlers:    make(map[packer.ID]MessageHandler),
-		log:         logrus.New(),
 	}
 }
 
@@ -63,7 +61,7 @@ func (tc *TCPClient) Connect(addr string) error {
 	go tc.readLoop()
 	go tc.writeLoop()
 
-	tc.log.Infof("TCP client connected to %s", addr)
+	tc.log("INFO", fmt.Sprintf("TCP client connected to %s", addr))
 	return nil
 }
 
@@ -84,7 +82,7 @@ func (tc *TCPClient) Disconnect() {
 	}
 
 	tc.wg.Wait()
-	tc.log.Info("TCP client disconnected")
+	tc.log("INFO", "TCP client disconnected")
 }
 
 // IsConnected 检查是否已连接
@@ -95,20 +93,29 @@ func (tc *TCPClient) IsConnected() bool {
 }
 
 // Send 发送消息到服务器
-func (tc *TCPClient) Send(data []byte) error {
+func (tc *TCPClient) Send(msgID packer.ID, v any) (int, error) {
 	tc.mu.RLock()
 	defer tc.mu.RUnlock()
 
 	if !tc.isConnected {
-		return fmt.Errorf("client is not connected")
+		return 0, fmt.Errorf("client is not connected")
+	}
+
+	data, err := tc.Codec.Encode(v)
+	if err != nil {
+		return 0, err
+	}
+	packedMsg, err := tc.packer.Pack(easytcp.NewMessage(msgID, data))
+	if err != nil {
+		return 0, err
 	}
 
 	// 发送到写循环
 	select {
-	case tc.messageChan <- data:
-		return nil
+	case tc.messageChan <- packedMsg:
+		return len(packedMsg), nil
 	case <-time.After(5 * time.Second):
-		return fmt.Errorf("send timeout")
+		return 0, fmt.Errorf("send timeout")
 	}
 }
 
@@ -124,11 +131,6 @@ func (tc *TCPClient) RemoveHandler(msgID packer.ID) {
 	tc.handlerMu.Lock()
 	defer tc.handlerMu.Unlock()
 	delete(tc.handlers, msgID)
-}
-
-// SetLogger 设置日志记录器
-func (tc *TCPClient) SetLogger(logger *logrus.Logger) {
-	tc.log = logger
 }
 
 // 读取循环
@@ -166,7 +168,7 @@ func (tc *TCPClient) writeLoop() {
 
 			_, err := tc.conn.Write(message)
 			if err != nil {
-				tc.log.Errorf("Write error: %v", err)
+				tc.log("ERROR", fmt.Sprintf("Write error: %v", err))
 				tc.Disconnect()
 				return
 			}
@@ -183,7 +185,7 @@ func (tc *TCPClient) handleMessage(message *easytcp.Message) {
 	if exists {
 		handler(message)
 	} else {
-		tc.log.Debugf("No handler for message ID: %d, Data: %v", message.ID(), message.Data())
+		tc.log("DEBUG", fmt.Sprintf("No handler for message ID: %d, Data: %v", message.ID(), message.Data()))
 	}
 }
 
@@ -223,4 +225,11 @@ func (tc *TCPClient) SetWriteTimeout(timeout time.Duration) error {
 	}
 
 	return tc.conn.SetWriteDeadline(time.Now().Add(timeout))
+}
+
+// log 内部日志记录方法
+func (ts *TCPClient) log(level, message string) {
+	if ts.OnLog != nil {
+		ts.OnLog(level, message)
+	}
 }

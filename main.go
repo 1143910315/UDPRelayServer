@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"database/sql"
+	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -23,7 +24,9 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/1143910315/UDPRelayServer/net/packer"
 	"github.com/1143910315/UDPRelayServer/net/tcp"
+	"github.com/DarthPestilane/easytcp"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -86,11 +89,7 @@ func NewConfigManager() (*ConfigManager, error) {
 	}
 
 	// 创建配置表
-	createTableSQL := `
-    CREATE TABLE IF NOT EXISTS app_config (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-    );`
+	createTableSQL := "CREATE TABLE IF NOT EXISTS app_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
 
 	_, err = db.Exec(createTableSQL)
 	if err != nil {
@@ -98,19 +97,20 @@ func NewConfigManager() (*ConfigManager, error) {
 	}
 
 	// 创建密钥表
-	createKeyTableSQL := `
-	CREATE TABLE IF NOT EXISTS key_pairs (
-		id INTEGER PRIMARY KEY,
-		service_id TEXT NOT NULL UNIQUE,
-		private_key TEXT NOT NULL,
-		public_key TEXT NOT NULL
-	);`
+	createKeyTableSQL := "CREATE TABLE IF NOT EXISTS key_pairs (id INTEGER PRIMARY KEY,	service_id TEXT NOT NULL UNIQUE, private_key TEXT NOT NULL, public_key TEXT NOT NULL)"
 
 	_, err = db.Exec(createKeyTableSQL)
 	if err != nil {
 		return nil, err
 	}
 
+	// 创建服务器表
+	createServerTableSQL := "CREATE TABLE IF NOT EXISTS servers (service_id TEXT PRIMARY KEY, auth_code TEXT NOT NULL, device_id TEXT NOT NULL)"
+
+	_, err = db.Exec(createServerTableSQL)
+	if err != nil {
+		return nil, err
+	}
 	return &ConfigManager{
 		db:             db,
 		debounceTimers: make(map[string]*time.Timer),
@@ -122,9 +122,7 @@ func (cm *ConfigManager) SetConfig(key, value string) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
-	_, err := cm.db.Exec(`
-        INSERT OR REPLACE INTO app_config (key, value) 
-        VALUES (?, ?)`, key, value)
+	_, err := cm.db.Exec("INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)", key, value)
 	return err
 }
 
@@ -169,6 +167,74 @@ func (cm *ConfigManager) GetConfig(key, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+// 生成密钥对并插入数据库，最多尝试三次
+func (cm *ConfigManager) insertKeyPair(id int) (string, string, string, error) {
+	for range 3 {
+		publicKey, privateKey, err := GenerateKeyPair()
+		if err != nil {
+			return "", "", "", err
+		}
+
+		serviceId, err := uuid.NewUUID()
+		if err != nil {
+			return "", "", "", err
+		}
+
+		_, err = cm.db.Exec("INSERT INTO key_pairs (id, service_id, private_key, public_key) VALUES (?, ?, ?, ?)", id, serviceId.String(), privateKey, publicKey)
+		if err != nil {
+			if strings.Contains(err.Error(), "UNIQUE constraint") {
+				// service_id 重复，继续重试
+				continue
+			}
+			return "", "", "", err
+		}
+
+		return serviceId.String(), privateKey, publicKey, nil
+	}
+	return "", "", "", errors.New("插入密钥对失败，已达到最大重试次数")
+}
+
+// 从数据库获取密钥对
+func (cm *ConfigManager) GetKeyPairByID(id int) (string, string, string, error) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+
+	var serviceId, privateKey, publicKey string
+	err := cm.db.QueryRow("SELECT service_id, private_key, public_key FROM key_pairs WHERE id = ?", id).
+		Scan(&serviceId, &privateKey, &publicKey)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// 数据不存在，插入新数据
+			return cm.insertKeyPair(id)
+		}
+		return "", "", "", err
+	}
+	return serviceId, privateKey, publicKey, nil
+}
+
+// 根据serviceId查询认证码和设备id
+func (cm *ConfigManager) GetServerByServiceId(serviceId string) (string, string, error) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+
+	var authCode, deviceId string
+	err := cm.db.QueryRow("SELECT auth_code, device_id FROM servers WHERE service_id = ?", serviceId).
+		Scan(&authCode, &deviceId)
+	if err != nil {
+		return "", "", err
+	}
+	return authCode, deviceId, nil
+}
+
+// 插入serviceId、认证码、设备id
+func (cm *ConfigManager) InsertServer(serviceId, authCode, deviceId string) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	_, err := cm.db.Exec("INSERT INTO servers (service_id, auth_code, device_id) VALUES (?, ?, ?)", serviceId, authCode, deviceId)
+	return err
 }
 
 // 关闭数据库连接
@@ -400,53 +466,6 @@ func DecryptWithPrivateKey(privateKeyPEM string, encrypted []byte) ([]byte, erro
 	return decrypted, nil
 }
 
-// 生成密钥对并插入数据库，最多尝试三次
-func (cm *ConfigManager) insertKeyPair(id int) (string, string, string, error) {
-	for range 3 {
-		publicKey, privateKey, err := GenerateKeyPair()
-		if err != nil {
-			return "", "", "", err
-		}
-
-		serviceId, err := uuid.NewUUID()
-		if err != nil {
-			return "", "", "", err
-		}
-
-		_, err = cm.db.Exec(`
-            INSERT INTO key_pairs (id, service_id, private_key, public_key) 
-            VALUES (?, ?, ?, ?)`, id, serviceId.String(), privateKey, publicKey)
-		if err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint") {
-				// service_id 重复，继续重试
-				continue
-			}
-			return "", "", "", err
-		}
-
-		return serviceId.String(), privateKey, publicKey, nil
-	}
-	return "", "", "", errors.New("插入密钥对失败，已达到最大重试次数")
-}
-
-// 从数据库获取密钥对
-func (cm *ConfigManager) GetKeyPairByID(id int) (string, string, string, error) {
-	cm.mutex.RLock()
-	defer cm.mutex.RUnlock()
-
-	var serviceId, privateKey, publicKey string
-	err := cm.db.QueryRow("SELECT service_id, private_key, public_key FROM key_pairs WHERE id = ?", id).
-		Scan(&serviceId, &privateKey, &publicKey)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			// 数据不存在，插入新数据
-			return cm.insertKeyPair(id)
-		}
-		return "", "", "", err
-	}
-	return serviceId, privateKey, publicKey, nil
-}
-
 // GUI应用程序结构
 type UDPRelayApp struct {
 	app           fyne.App
@@ -499,7 +518,7 @@ func (ua *UDPRelayApp) createUI() {
 	// 从数据库加载配置，如果失败则使用默认值
 	if ua.configManager != nil {
 		listenAddressEntry.SetText(ua.configManager.GetConfig("listen_port", "8080"))
-		targetHostEntry.SetText(ua.configManager.GetConfig("target_host", "127.0.0.1"))
+		targetHostEntry.SetText(ua.configManager.GetConfig("target_host", "127.0.0.1:8080"))
 		targetPortEntry.SetText(ua.configManager.GetConfig("target_port", "8081"))
 
 		// 设置配置保存回调
@@ -514,7 +533,7 @@ func (ua *UDPRelayApp) createUI() {
 		}
 	} else {
 		listenAddressEntry.SetText("8080")
-		targetHostEntry.SetText("127.0.0.1")
+		targetHostEntry.SetText("127.0.0.1:8080")
 		targetPortEntry.SetText("8081")
 	}
 
@@ -536,7 +555,7 @@ func (ua *UDPRelayApp) createUI() {
 			ua.playersMutex.Lock()
 			defer ua.playersMutex.Unlock()
 
-			ua.players = append(ua.players, &Player{
+			player := &Player{
 				sessionID:         sessionID,
 				ID:                "",
 				Remark:            "", // 初始备注为空
@@ -547,15 +566,68 @@ func (ua *UDPRelayApp) createUI() {
 				LastDownload:      0,
 				Ping:              0,
 				LastSpeedCalcTime: time.Now(),
-			})
-			playersSize := len(ua.players)
+			}
+			ua.players = append(ua.players, player)
 			fyne.Do(func() {
 				ua.appendLog(fmt.Sprintf("客户端连接: %s", sessionID))
-				ua.refreshPlayerTableForRow(playersSize) // 刷新表格显示
+				ua.refreshPlayerTable() // 刷新表格显示
 			})
-			ua.configManager.GetKeyPairByID(0)
-			//ua.tcpService.SendToSession(sessionID,i)
+			serviceId, _, publicKey, err := ua.configManager.GetKeyPairByID(0)
+			if err != nil {
+				fyne.Do(func() {
+					ua.appendLog(fmt.Sprintf("获取密钥对失败: %v", err))
+				})
+				return
+			}
+			req := &packer.ServiceIdPackage{
+				Index:     0,
+				ServiceId: serviceId,
+				PublicKey: publicKey,
+			}
+			sendBytesSize, err := ua.tcpService.SendToSession(sessionID, packer.ID_ServiceIdPackageID, req)
+			if err != nil {
+				fyne.Do(func() {
+					ua.appendLog(fmt.Sprintf("发送密钥对失败: %v", err))
+				})
+				return
+			}
+			player.TotalUpload = int64(sendBytesSize)
 		}
+		ua.tcpService.OnClientDisconnected = func(sessionID string) {
+			ua.playersMutex.Lock()
+			defer ua.playersMutex.Unlock()
+
+			for i, player := range ua.players {
+				if player.sessionID == sessionID {
+					ua.players = append(ua.players[:i], ua.players[i+1:]...)
+					break
+				}
+			}
+			fyne.Do(func() {
+				ua.appendLog(fmt.Sprintf("客户端断开: %s", sessionID))
+				ua.refreshPlayerTable() // 刷新表格显示
+			})
+		}
+		ua.tcpService.AddRoute(packer.ID_AuthenticationIdPackageID, func(ctx easytcp.Context) {
+			var reqData packer.AuthenticationIdPackage
+			_ = ctx.Request().Data()
+			_ = ctx.Session().ID()
+			err := ctx.Bind(&reqData)
+			if err != nil {
+				fyne.Do(func() {
+					ua.appendLog(fmt.Sprintf("解析认证包失败: %v", err))
+				})
+				return
+			}
+
+			//err := ctx.SetResponse(common.ID_FooRespID, &common.FooResp{
+			//	Code:    2,
+			//	Message: "success",
+			//})
+			//if err != nil {
+			//	log.Errorf("set response failed: %s", err)
+			//}
+		})
 		err = ua.tcpService.Start(":" + listenAddress)
 		if err != nil {
 			ua.appendLog(fmt.Sprintf("启动TCP服务器失败: %v", err))
@@ -598,6 +670,46 @@ func (ua *UDPRelayApp) createUI() {
 		}
 
 		ua.tcpClient = tcp.NewTCPClient()
+		ua.tcpClient.AddHandler(packer.ID_ServiceIdPackageID, func(m *easytcp.Message) {
+			var respData packer.ServiceIdPackage
+			if err := ua.tcpClient.Codec.Decode(m.Data(), &respData); err != nil {
+				fyne.Do(func() {
+					ua.appendLog(fmt.Sprintf("错误：解析服务ID包失败: %v", err))
+				})
+				return
+			}
+			authCode, deviceId, err := ua.configManager.GetServerByServiceId(respData.ServiceId)
+			authenticationId := ""
+			if err != nil {
+				fyne.Do(func() {
+					ua.appendLog(fmt.Sprintf("信息：连接到新服务器：%s", respData.ServiceId))
+				})
+			} else {
+				encryptedAuthCode, err := EncryptWithPublicKey(respData.PublicKey, []byte(authCode))
+				if err != nil {
+					fyne.Do(func() {
+						ua.appendLog(fmt.Sprintf("错误：加密认证码失败: %v", err))
+					})
+					deviceId = ""
+				} else {
+					authenticationId = base64.StdEncoding.EncodeToString(encryptedAuthCode)
+				}
+			}
+
+			req := &packer.AuthenticationIdPackage{
+				Index:            0,
+				DeviceId:         deviceId,
+				AuthenticationId: authenticationId,
+			}
+			sendBytesSize, err := ua.tcpClient.Send(packer.ID_AuthenticationIdPackageID, req)
+			if err != nil {
+				fyne.Do(func() {
+					ua.appendLog(fmt.Sprintf("错误：发送认证码失败: %v", err))
+				})
+				return
+			}
+			ua.appendLog(fmt.Sprintf("信息：认证码发送成功，共 %d 字节", sendBytesSize))
+		})
 		err := ua.tcpClient.Connect(targetHost)
 		if err != nil {
 			ua.appendLog(fmt.Sprintf("错误：连接服务器失败: %v", err))
@@ -736,7 +848,7 @@ func (ua *UDPRelayApp) createPlayerTable() {
 			return len(ua.players) + 2, 5 // 行数(玩家数+表头)，列数
 		},
 		func() fyne.CanvasObject {
-			return widget.NewLabel("")
+			return widget.NewLabel("模板文本")
 		},
 		func(tci widget.TableCellID, co fyne.CanvasObject) {
 			label := co.(*widget.Label)
@@ -783,6 +895,8 @@ func (ua *UDPRelayApp) createPlayerTable() {
 				case 4:
 					label.SetText(strconv.Itoa(player.Ping) + "ms")
 				}
+			} else {
+				label.SetText("")
 			}
 		},
 	)
@@ -828,17 +942,6 @@ func (ua *UDPRelayApp) calculateDownloadSpeed(player *Player) float64 {
 func (ua *UDPRelayApp) refreshPlayerTable() {
 	if ua.playerTable != nil {
 		ua.playerTable.Refresh()
-	}
-}
-
-// 更新玩家表格显示
-func (ua *UDPRelayApp) refreshPlayerTableForRow(row int) {
-	if ua.playerTable != nil {
-		ua.playerTable.RefreshItem(widget.TableCellID{Row: row, Col: 0})
-		ua.playerTable.RefreshItem(widget.TableCellID{Row: row, Col: 1})
-		ua.playerTable.RefreshItem(widget.TableCellID{Row: row, Col: 2})
-		ua.playerTable.RefreshItem(widget.TableCellID{Row: row, Col: 3})
-		ua.playerTable.RefreshItem(widget.TableCellID{Row: row, Col: 4})
 	}
 }
 

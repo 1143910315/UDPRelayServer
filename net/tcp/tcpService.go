@@ -11,7 +11,7 @@ import (
 
 // TCPServer TCP服务器组件
 type TCPServer struct {
-	srv                  *easytcp.Server
+	service              *easytcp.Server
 	sessions             map[string]easytcp.Session // 保存活跃会话
 	mu                   sync.RWMutex
 	isRunning            bool
@@ -23,9 +23,19 @@ type TCPServer struct {
 
 // NewTCPServer 创建新的TCP服务器实例
 func NewTCPServer() *TCPServer {
-	return &TCPServer{
-		sessions: make(map[string]easytcp.Session),
+	service := easytcp.NewServer(&easytcp.ServerOption{
+		Packer: &packer.LengthWithIdPacker{},
+		Codec:  &easytcp.ProtobufCodec{},
+	})
+	ts := &TCPServer{
+		service:   service,
+		sessions:  make(map[string]easytcp.Session),
+		isRunning: false,
 	}
+	// 注册会话事件处理
+	service.OnSessionCreate = ts.onSessionCreate
+	service.OnSessionClose = ts.onSessionClose
+	return ts
 }
 
 // Start 启动TCP服务器
@@ -33,29 +43,14 @@ func (ts *TCPServer) Start(address string) error {
 	if ts.isRunning {
 		return nil
 	}
-
-	ts.srv = easytcp.NewServer(&easytcp.ServerOption{
-		Packer: &packer.LengthWithIdPacker{},
-		Codec:  &easytcp.ProtobufCodec{},
-	})
-
-	// 注册路由和中间件
-	//ts.srv.AddRoute(packer.ID_FooReqID, ts.handleFooRequest, ts.logTransmission(&packer.FooReq{}, &packer.FooResp{}))
-
-	// 注册会话事件处理
-	ts.srv.OnSessionCreate = ts.onSessionCreate
-	ts.srv.OnSessionClose = ts.onSessionClose
-
 	ts.isRunning = true
 
 	// 在goroutine中运行服务器
-	ts.wg.Add(1)
-	go func() {
-		defer ts.wg.Done()
-		if err := ts.srv.Run(address); err != nil {
+	ts.wg.Go(func() {
+		if err := ts.service.Run(address); err != nil {
 			ts.log("ERROR", fmt.Sprintf("服务器错误: %s", err))
 		}
-	}()
+	})
 	return nil
 }
 
@@ -66,8 +61,8 @@ func (ts *TCPServer) Stop() {
 	}
 
 	ts.isRunning = false
-	if ts.srv != nil {
-		ts.srv.Stop()
+	if ts.service != nil {
+		ts.service.Stop()
 	}
 	ts.wg.Wait()
 
@@ -83,31 +78,34 @@ func (ts *TCPServer) IsRunning() bool {
 }
 
 // SendToSession 向指定会话发送数据
-func (ts *TCPServer) SendToSession(sessionID string, msgID packer.ID, data []byte) error {
+func (ts *TCPServer) SendToSession(sessionID string, msgID packer.ID, v any) (int, error) {
 	ts.mu.RLock()
 	session, exists := ts.sessions[sessionID]
 	ts.mu.RUnlock()
 
 	if !exists {
-		return fmt.Errorf("session not found: %s", sessionID)
+		return 0, fmt.Errorf("session not found: %s", sessionID)
 	}
-	lengthWithIdPacker := packer.LengthWithIdPacker{}
-	packedMsg, err := lengthWithIdPacker.Pack(easytcp.NewMessage(msgID, data))
+
+	data, err := ts.service.Codec.Encode(v)
 	if err != nil {
-		return err
+		panic(err)
+	}
+	packedMsg, err := ts.service.Packer.Pack(easytcp.NewMessage(msgID, data))
+	if err != nil {
+		return 0, err
 	}
 	if _, err := session.Conn().Write(packedMsg); err != nil {
-		return err
+		return 0, err
 	}
-	return nil
+	return len(packedMsg), nil
 }
 
 // Broadcast 广播消息到所有会话
 func (ts *TCPServer) Broadcast(msgID packer.ID, data []byte) []error {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
-	lengthWithIdPacker := packer.LengthWithIdPacker{}
-	packedMsg, err := lengthWithIdPacker.Pack(easytcp.NewMessage(msgID, data))
+	packedMsg, err := ts.service.Packer.Pack(easytcp.NewMessage(msgID, data))
 	if err != nil {
 		return []error{err}
 	}
@@ -206,9 +204,9 @@ func (ts *TCPServer) onSessionClose(session easytcp.Session) {
 }
 
 // 添加自定义路由
-func (ts *TCPServer) AddRoute(msgID int, handler easytcp.HandlerFunc, middlewares ...easytcp.MiddlewareFunc) {
-	if ts.srv != nil {
-		ts.srv.AddRoute(msgID, handler, middlewares...)
+func (ts *TCPServer) AddRoute(msgID packer.ID, handler easytcp.HandlerFunc, middlewares ...easytcp.MiddlewareFunc) {
+	if ts.service != nil {
+		ts.service.AddRoute(msgID, handler, middlewares...)
 	}
 }
 
