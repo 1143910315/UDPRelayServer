@@ -26,6 +26,7 @@ import (
 
 	"github.com/1143910315/UDPRelayServer/net/packer"
 	"github.com/1143910315/UDPRelayServer/net/tcp"
+	"github.com/1143910315/UDPRelayServer/utils"
 	"github.com/DarthPestilane/easytcp"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
@@ -61,16 +62,17 @@ func (c CustomTheme) Size(name fyne.ThemeSizeName) float32 {
 
 // 玩家结构体
 type Player struct {
-	sessionID         string
-	ID                string
-	Remark            string
-	Port              int
-	TotalUpload       int64
-	TotalDownload     int64
-	LastUpload        int64
-	LastDownload      int64
-	Ping              int
-	LastSpeedCalcTime time.Time
+	SessionID     string
+	DeviceIdID    string
+	Remark        string
+	Port          int
+	TotalUpload   int64
+	TotalDownload int64
+	LastUpload    int64
+	LastDownload  int64
+	DownloadSpeed string
+	UploadSpeed   string
+	Ping          int
 }
 
 // 配置管理结构体
@@ -90,7 +92,6 @@ func NewConfigManager() (*ConfigManager, error) {
 
 	// 创建配置表
 	createTableSQL := "CREATE TABLE IF NOT EXISTS app_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-
 	_, err = db.Exec(createTableSQL)
 	if err != nil {
 		return nil, err
@@ -98,7 +99,6 @@ func NewConfigManager() (*ConfigManager, error) {
 
 	// 创建密钥表
 	createKeyTableSQL := "CREATE TABLE IF NOT EXISTS key_pairs (id INTEGER PRIMARY KEY,	service_id TEXT NOT NULL UNIQUE, private_key TEXT NOT NULL, public_key TEXT NOT NULL)"
-
 	_, err = db.Exec(createKeyTableSQL)
 	if err != nil {
 		return nil, err
@@ -106,11 +106,25 @@ func NewConfigManager() (*ConfigManager, error) {
 
 	// 创建服务器表
 	createServerTableSQL := "CREATE TABLE IF NOT EXISTS servers (service_id TEXT PRIMARY KEY, auth_code TEXT NOT NULL, device_id TEXT NOT NULL)"
-
 	_, err = db.Exec(createServerTableSQL)
 	if err != nil {
 		return nil, err
 	}
+
+	// 创建设备认证表
+	createDeviceAuthTableSQL := "CREATE TABLE IF NOT EXISTS device_authentication (device_id TEXT PRIMARY KEY, authentication_id TEXT NOT NULL)"
+	_, err = db.Exec(createDeviceAuthTableSQL)
+	if err != nil {
+		return nil, err
+	}
+
+	// 创建设备服务备注表
+	createDeviceServiceRemarkTableSQL := "CREATE TABLE IF NOT EXISTS device_service_remark (device_id TEXT, service_id TEXT, remark TEXT, PRIMARY KEY (device_id, service_id))"
+	_, err = db.Exec(createDeviceServiceRemarkTableSQL)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ConfigManager{
 		db:             db,
 		debounceTimers: make(map[string]*time.Timer),
@@ -235,6 +249,50 @@ func (cm *ConfigManager) InsertServer(serviceId, authCode, deviceId string) erro
 
 	_, err := cm.db.Exec("INSERT INTO servers (service_id, auth_code, device_id) VALUES (?, ?, ?)", serviceId, authCode, deviceId)
 	return err
+}
+
+// 设置设备认证信息
+func (cm *ConfigManager) SetDeviceAuthentication(deviceId, authenticationId string) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	_, err := cm.db.Exec("INSERT OR REPLACE INTO device_authentication (device_id, authentication_id) VALUES (?, ?)", deviceId, authenticationId)
+	return err
+}
+
+// 获取设备认证信息
+func (cm *ConfigManager) GetDeviceAuthentication(deviceId string) (string, error) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+
+	var authenticationId string
+	err := cm.db.QueryRow("SELECT authentication_id FROM device_authentication WHERE device_id = ?", deviceId).Scan(&authenticationId)
+	if err != nil {
+		return "", err
+	}
+	return authenticationId, nil
+}
+
+// 设置设备服务备注
+func (cm *ConfigManager) SetDeviceServiceRemark(deviceId, serviceId, remark string) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	_, err := cm.db.Exec("INSERT OR REPLACE INTO device_service_remark (device_id, service_id, remark) VALUES (?, ?, ?)", deviceId, serviceId, remark)
+	return err
+}
+
+// 获取设备服务备注
+func (cm *ConfigManager) GetDeviceServiceRemark(deviceId, serviceId string) (string, error) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+
+	var remark string
+	err := cm.db.QueryRow("SELECT remark FROM device_service_remark WHERE device_id = ? AND service_id = ?", deviceId, serviceId).Scan(&remark)
+	if err != nil {
+		return "", err
+	}
+	return remark, nil
 }
 
 // 关闭数据库连接
@@ -468,22 +526,21 @@ func DecryptWithPrivateKey(privateKeyPEM string, encrypted []byte) ([]byte, erro
 
 // GUI应用程序结构
 type UDPRelayApp struct {
-	app           fyne.App
-	window        fyne.Window
-	udpRelay      *UDPRelay
-	tcpService    *tcp.TCPServer
-	tcpClient     *tcp.TCPClient
-	logText       *widget.Entry
-	startBtn      *widget.Button
-	stopBtn       *widget.Button
-	connectBtn    *widget.Button
-	disconnectBtn *widget.Button
-	configManager *ConfigManager
-	// 玩家列表控件
-	playerTable *widget.Table
-	// 玩家列表
-	players      []*Player
-	playersMutex sync.RWMutex
+	app                       fyne.App
+	window                    fyne.Window
+	udpRelay                  *UDPRelay
+	tcpService                *tcp.TCPServer
+	tcpClient                 *tcp.TCPClient
+	logText                   *widget.Entry
+	startBtn                  *widget.Button
+	stopBtn                   *widget.Button
+	connectBtn                *widget.Button
+	disconnectBtn             *widget.Button
+	configManager             *ConfigManager
+	playerTable               *widget.Table
+	players                   []*Player
+	playersMutex              sync.RWMutex
+	advancedStringIncrementer *utils.AdvancedStringIncrementer
 }
 
 // NewUDPRelayApp 创建新的GUI应用程序
@@ -502,9 +559,10 @@ func NewUDPRelayApp() *UDPRelayApp {
 	myApp.Settings().SetTheme(&CustomTheme{})
 
 	return &UDPRelayApp{
-		app:           myApp,
-		window:        window,
-		configManager: configManager,
+		app:                       myApp,
+		window:                    window,
+		configManager:             configManager,
+		advancedStringIncrementer: utils.NewAdvancedStringIncrementer(),
 	}
 }
 
@@ -552,20 +610,26 @@ func (ua *UDPRelayApp) createUI() {
 
 		ua.tcpService = tcp.NewTCPServer()
 		ua.tcpService.OnClientConnected = func(sessionID string) {
+			uploadBytesSize := new(int64)
+			downloadBytesSize := new(int64)
+			*uploadBytesSize = 0
+			*downloadBytesSize = 0
+			defer ua.UpdatePlayerTrafficBySessionID(sessionID, uploadBytesSize, downloadBytesSize)
+
 			ua.playersMutex.Lock()
 			defer ua.playersMutex.Unlock()
-
 			player := &Player{
-				sessionID:         sessionID,
-				ID:                "",
-				Remark:            "", // 初始备注为空
-				Port:              0,  // 初始端口为0，后续可更新
-				TotalUpload:       0,
-				TotalDownload:     0,
-				LastUpload:        0,
-				LastDownload:      0,
-				Ping:              0,
-				LastSpeedCalcTime: time.Now(),
+				SessionID:     sessionID,
+				DeviceIdID:    "",
+				Remark:        "", // 初始备注为空
+				Port:          0,  // 初始端口为0，后续可更新
+				TotalUpload:   0,
+				TotalDownload: 0,
+				LastUpload:    0,
+				LastDownload:  0,
+				UploadSpeed:   "0.00 B/s",
+				DownloadSpeed: "0.00 B/s",
+				Ping:          0,
 			}
 			ua.players = append(ua.players, player)
 			fyne.Do(func() {
@@ -591,14 +655,14 @@ func (ua *UDPRelayApp) createUI() {
 				})
 				return
 			}
-			player.TotalUpload = int64(sendBytesSize)
+			*uploadBytesSize = int64(sendBytesSize)
 		}
 		ua.tcpService.OnClientDisconnected = func(sessionID string) {
 			ua.playersMutex.Lock()
 			defer ua.playersMutex.Unlock()
 
 			for i, player := range ua.players {
-				if player.sessionID == sessionID {
+				if player.SessionID == sessionID {
 					ua.players = append(ua.players[:i], ua.players[i+1:]...)
 					break
 				}
@@ -609,15 +673,39 @@ func (ua *UDPRelayApp) createUI() {
 			})
 		}
 		ua.tcpService.AddRoute(packer.ID_AuthenticationIdPackageID, func(ctx easytcp.Context) {
+			uploadBytesSize := new(int64)
+			downloadBytesSize := new(int64)
+			*uploadBytesSize = 0
 			var reqData packer.AuthenticationIdPackage
-			_ = ctx.Request().Data()
-			_ = ctx.Session().ID()
+			rawData := ctx.Request().Data()
+			*downloadBytesSize = int64(len(rawData) + 8)
+			sessionID := ctx.Session().ID().(string)
+			defer ua.UpdatePlayerTrafficBySessionID(sessionID, uploadBytesSize, downloadBytesSize)
 			err := ctx.Bind(&reqData)
 			if err != nil {
 				fyne.Do(func() {
 					ua.appendLog(fmt.Sprintf("解析认证包失败: %v", err))
 				})
 				return
+			}
+			if reqData.AuthenticationId == "" || reqData.DeviceId == "" {
+				nextDeviceId := ua.advancedStringIncrementer.IncrementString(ua.configManager.GetConfig("max_generated_device_id", "A"))
+				ua.configManager.SetConfig("max_generated_device_id", nextDeviceId)
+				uuidObj, _ := uuid.NewUUID()
+				authenticationId := uuidObj.String()
+				ua.configManager.SetDeviceAuthentication(nextDeviceId, authenticationId)
+				req := &packer.ConfirmRegisterPackage{
+					AuthenticationId: authenticationId,
+					DeviceId:         nextDeviceId,
+				}
+				sendBytesSize, err := ua.tcpService.SendToSession(sessionID, packer.ID_ConfirmRegisterPackageID, req)
+				if err != nil {
+					fyne.Do(func() {
+						ua.appendLog(fmt.Sprintf("发送密钥对失败: %v", err))
+					})
+					return
+				}
+				*uploadBytesSize = *uploadBytesSize + int64(sendBytesSize)
 			}
 
 			//err := ctx.SetResponse(common.ID_FooRespID, &common.FooResp{
@@ -633,6 +721,24 @@ func (ua *UDPRelayApp) createUI() {
 			ua.appendLog(fmt.Sprintf("启动TCP服务器失败: %v", err))
 			return
 		}
+		ua.playersMutex.Lock()
+		ua.players = []*Player{
+			{
+				SessionID:     "",
+				DeviceIdID:    "A",
+				Remark:        "",
+				Port:          8080,
+				TotalUpload:   0,
+				TotalDownload: 0,
+				LastUpload:    0,
+				LastDownload:  0,
+				UploadSpeed:   "0.00 B/s",
+				DownloadSpeed: "0.00 B/s",
+				Ping:          0,
+			},
+		}
+		ua.playersMutex.Unlock()
+		ua.refreshPlayerTable()
 
 		ua.appendLog(fmt.Sprintf("信息：TCP服务器启动成功，监听 %s", listenAddress))
 
@@ -671,8 +777,14 @@ func (ua *UDPRelayApp) createUI() {
 
 		ua.tcpClient = tcp.NewTCPClient()
 		ua.tcpClient.AddHandler(packer.ID_ServiceIdPackageID, func(m *easytcp.Message) {
+			uploadBytesSize := new(int64)
+			downloadBytesSize := new(int64)
+			*uploadBytesSize = 0
+			data := m.Data()
+			*downloadBytesSize = int64(len(data) + 8)
+			defer ua.UpdatePlayerTrafficByDeviceIdID("A", uploadBytesSize, downloadBytesSize)
 			var respData packer.ServiceIdPackage
-			if err := ua.tcpClient.Codec.Decode(m.Data(), &respData); err != nil {
+			if err := ua.tcpClient.Codec.Decode(data, &respData); err != nil {
 				fyne.Do(func() {
 					ua.appendLog(fmt.Sprintf("错误：解析服务ID包失败: %v", err))
 				})
@@ -708,14 +820,30 @@ func (ua *UDPRelayApp) createUI() {
 				})
 				return
 			}
-			ua.appendLog(fmt.Sprintf("信息：认证码发送成功，共 %d 字节", sendBytesSize))
+			*uploadBytesSize = int64(sendBytesSize)
 		})
 		err := ua.tcpClient.Connect(targetHost)
 		if err != nil {
 			ua.appendLog(fmt.Sprintf("错误：连接服务器失败: %v", err))
 			return
 		}
-
+		ua.playersMutex.Lock()
+		ua.players = []*Player{
+			{
+				SessionID:     "",
+				DeviceIdID:    "",
+				Remark:        "",
+				Port:          0,
+				TotalUpload:   0,
+				TotalDownload: 0,
+				LastUpload:    0,
+				LastDownload:  0,
+				UploadSpeed:   "0.00 B/s",
+				DownloadSpeed: "0.00 B/s",
+				Ping:          0,
+			},
+		}
+		ua.playersMutex.Unlock()
 		ua.appendLog(fmt.Sprintf("信息：连接到服务器 %s", targetHost))
 		ua.connectBtn.Disable()
 		ua.disconnectBtn.Enable()
@@ -880,18 +1008,14 @@ func (ua *UDPRelayApp) createPlayerTable() {
 					if player.Remark != "" {
 						label.SetText(player.Remark)
 					} else {
-						label.SetText(player.ID)
+						label.SetText(player.DeviceIdID)
 					}
 				case 1:
 					label.SetText(strconv.Itoa(player.Port))
 				case 2:
-					// 计算上传速度
-					speed := ua.calculateUploadSpeed(player)
-					label.SetText(fmt.Sprintf("%.2f KB/s", speed))
+					label.SetText(player.UploadSpeed)
 				case 3:
-					// 计算下载速度
-					speed := ua.calculateDownloadSpeed(player)
-					label.SetText(fmt.Sprintf("%.2f KB/s", speed))
+					label.SetText(player.DownloadSpeed)
 				case 4:
 					label.SetText(strconv.Itoa(player.Ping) + "ms")
 				}
@@ -908,40 +1032,100 @@ func (ua *UDPRelayApp) createPlayerTable() {
 	ua.playerTable.SetColumnWidth(4, 80)  // Ping列宽度
 }
 
-// 计算上传速度
-func (ua *UDPRelayApp) calculateUploadSpeed(player *Player) float64 {
-	if time.Since(player.LastSpeedCalcTime).Seconds() < 1 {
-		return 0
-	}
-
-	speed := float64(player.TotalUpload-player.LastUpload) / 1024 /
-		time.Since(player.LastSpeedCalcTime).Seconds()
-
-	player.LastUpload = player.TotalUpload
-	player.LastSpeedCalcTime = time.Now()
-
-	return speed
+// startSpeedTimer 启动速度计算定时器
+func (ua *UDPRelayApp) StartSpeedTimer() {
+	ticker := time.NewTicker(1 * time.Second)
+	go func() {
+		for range ticker.C {
+			ua.calculateAndUpdateSpeeds()
+		}
+	}()
 }
 
-// 计算下载速度
-func (ua *UDPRelayApp) calculateDownloadSpeed(player *Player) float64 {
-	if time.Since(player.LastSpeedCalcTime).Seconds() < 1 {
-		return 0
+// calculateAndUpdateSpeeds 计算并更新所有玩家的速度
+func (ua *UDPRelayApp) calculateAndUpdateSpeeds() {
+	ua.playersMutex.Lock()
+	defer ua.playersMutex.Unlock()
+
+	for row, player := range ua.players {
+		// 计算上传速度
+		uploadDiff := player.TotalUpload - player.LastUpload
+		player.LastUpload = player.TotalUpload
+		uploadSpeedStr := formatSpeed(uploadDiff)
+		if player.UploadSpeed != uploadSpeedStr {
+			player.UploadSpeed = uploadSpeedStr
+			// 更新表格显示
+			fyne.Do(func() {
+				ua.refreshPlayerTableItem(row+1, 2) // +1是因为第0行是表头
+			})
+		}
+
+		// 计算下载速度
+		downloadDiff := player.TotalDownload - player.LastDownload
+		player.LastDownload = player.TotalDownload
+		downloadSpeedStr := formatSpeed(downloadDiff)
+		if player.DownloadSpeed != downloadSpeedStr {
+			player.DownloadSpeed = downloadSpeedStr
+			// 更新表格显示
+			fyne.Do(func() {
+				ua.refreshPlayerTableItem(row+1, 3) // +1是因为第0行是表头
+			})
+		}
 	}
+}
 
-	speed := float64(player.TotalDownload-player.LastDownload) / 1024 /
-		time.Since(player.LastSpeedCalcTime).Seconds()
+// formatSpeed 格式化速度显示，保留两位小数并自动匹配单位
+func formatSpeed(bytes int64) string {
+	if bytes < 1024 {
+		return fmt.Sprintf("%.2f B/s", float64(bytes))
+	} else if bytes < 1024*1024 {
+		return fmt.Sprintf("%.2f KB/s", float64(bytes)/1024)
+	} else if bytes < 1024*1024*1024 {
+		return fmt.Sprintf("%.2f MB/s", float64(bytes)/(1024*1024))
+	} else {
+		return fmt.Sprintf("%.2f GB/s", float64(bytes)/(1024*1024*1024))
+	}
+}
 
-	player.LastDownload = player.TotalDownload
-	player.LastSpeedCalcTime = time.Now()
+// 根据sessionID更新玩家流量统计
+func (ua *UDPRelayApp) UpdatePlayerTrafficBySessionID(sessionID string, uploadBytes *int64, downloadBytes *int64) {
+	if *uploadBytes != 0 || *downloadBytes != 0 {
+		ua.playersMutex.RLock()
+		defer ua.playersMutex.RUnlock()
 
-	return speed
+		for index, player := range ua.players {
+			if index == 0 || player.SessionID == sessionID {
+				player.TotalUpload = player.TotalUpload + *uploadBytes
+				player.TotalDownload = player.TotalDownload + *downloadBytes
+			}
+		}
+	}
+}
+
+// 根据DeviceIdID更新玩家流量统计
+func (ua *UDPRelayApp) UpdatePlayerTrafficByDeviceIdID(deviceIdID string, uploadBytes *int64, downloadBytes *int64) {
+	ua.playersMutex.RLock()
+	defer ua.playersMutex.RUnlock()
+
+	for index, player := range ua.players {
+		if index == 0 || player.DeviceIdID == deviceIdID {
+			player.TotalUpload = player.TotalUpload + *uploadBytes
+			player.TotalDownload = player.TotalDownload + *downloadBytes
+		}
+	}
 }
 
 // 更新玩家表格显示
 func (ua *UDPRelayApp) refreshPlayerTable() {
 	if ua.playerTable != nil {
 		ua.playerTable.Refresh()
+	}
+}
+
+// 更新玩家表格显示
+func (ua *UDPRelayApp) refreshPlayerTableItem(row int, col int) {
+	if ua.playerTable != nil {
+		ua.playerTable.RefreshItem(widget.TableCellID{Row: row, Col: col})
 	}
 }
 
@@ -979,6 +1163,7 @@ func (ua *UDPRelayApp) Cleanup() {
 
 func main() {
 	relayApp := NewUDPRelayApp()
+	relayApp.StartSpeedTimer()
 	relayApp.Run()
 	relayApp.configManager.WaitForDebounced()
 	// 清理资源

@@ -6,7 +6,6 @@ import (
 
 	"github.com/1143910315/UDPRelayServer/net/packer"
 	"github.com/DarthPestilane/easytcp"
-	"google.golang.org/protobuf/proto"
 )
 
 // TCPServer TCP服务器组件
@@ -21,7 +20,7 @@ type TCPServer struct {
 	OnLog                func(level, message string) // 日志事件回调
 }
 
-// NewTCPServer 创建新的TCP服务器实例
+// 创建新的TCP服务器实例
 func NewTCPServer() *TCPServer {
 	service := easytcp.NewServer(&easytcp.ServerOption{
 		Packer: &packer.LengthWithIdPacker{},
@@ -38,10 +37,10 @@ func NewTCPServer() *TCPServer {
 	return ts
 }
 
-// Start 启动TCP服务器
+// 启动TCP服务器
 func (ts *TCPServer) Start(address string) error {
 	if ts.isRunning {
-		return nil
+		return fmt.Errorf("服务器已经启动，请先停止服务器")
 	}
 	ts.isRunning = true
 
@@ -54,7 +53,7 @@ func (ts *TCPServer) Start(address string) error {
 	return nil
 }
 
-// Stop 停止TCP服务器
+// 停止TCP服务器
 func (ts *TCPServer) Stop() {
 	if !ts.isRunning {
 		return
@@ -72,21 +71,29 @@ func (ts *TCPServer) Stop() {
 	ts.mu.Unlock()
 }
 
-// IsRunning 检查服务器是否在运行
+// 检查服务器是否在运行
 func (ts *TCPServer) IsRunning() bool {
 	return ts.isRunning
 }
 
-// SendToSession 向指定会话发送数据
-func (ts *TCPServer) SendToSession(sessionID string, msgID packer.ID, v any) (int, error) {
+// 向指定会话发送原始数据
+func (ts *TCPServer) SendRawToSession(sessionID string, data []byte) error {
 	ts.mu.RLock()
 	session, exists := ts.sessions[sessionID]
 	ts.mu.RUnlock()
 
 	if !exists {
-		return 0, fmt.Errorf("session not found: %s", sessionID)
+		return fmt.Errorf("session not found: %s", sessionID)
 	}
 
+	if _, err := session.Conn().Write(data); err != nil {
+		return err
+	}
+	return nil
+}
+
+// 向指定会话发送数据
+func (ts *TCPServer) SendToSession(sessionID string, msgID packer.ID, v any) (int, error) {
 	data, err := ts.service.Codec.Encode(v)
 	if err != nil {
 		panic(err)
@@ -95,13 +102,13 @@ func (ts *TCPServer) SendToSession(sessionID string, msgID packer.ID, v any) (in
 	if err != nil {
 		return 0, err
 	}
-	if _, err := session.Conn().Write(packedMsg); err != nil {
+	if err := ts.SendRawToSession(sessionID, packedMsg); err != nil {
 		return 0, err
 	}
 	return len(packedMsg), nil
 }
 
-// Broadcast 广播消息到所有会话
+// 广播消息到所有会话
 func (ts *TCPServer) Broadcast(msgID packer.ID, data []byte) []error {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
@@ -118,14 +125,14 @@ func (ts *TCPServer) Broadcast(msgID packer.ID, data []byte) []error {
 	return errors
 }
 
-// GetSessionCount 获取当前活跃会话数量
+// 获取当前活跃会话数量
 func (ts *TCPServer) GetSessionCount() int {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 	return len(ts.sessions)
 }
 
-// GetSessionIDs 获取所有会话ID
+// 获取所有会话ID
 func (ts *TCPServer) GetSessionIDs() []string {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
@@ -135,46 +142,6 @@ func (ts *TCPServer) GetSessionIDs() []string {
 		ids = append(ids, id)
 	}
 	return ids
-}
-
-//// 处理Foo请求
-//func (ts *TCPServer) handleFooRequest(c easytcp.Context) {
-//	var reqData common.FooReq
-//	if err := c.Bind(&reqData); err != nil {
-//		log.Errorf("bind request failed: %s", err)
-//		return
-//	}
-//
-//	// 业务处理逻辑
-//	log.Debugf("processing foo request: %v", reqData)
-//
-//	// 设置响应
-//	err := c.SetResponse(common.ID_FooRespID, &common.FooResp{
-//		Code:    2,
-//		Message: "success",
-//	})
-//	if err != nil {
-//		log.Errorf("set response failed: %s", err)
-//	}
-//}
-
-// 日志传输中间件
-func (ts *TCPServer) logTransmission(req, resp proto.Message) easytcp.MiddlewareFunc {
-	return func(next easytcp.HandlerFunc) easytcp.HandlerFunc {
-		return func(c easytcp.Context) {
-			if err := c.Bind(req); err == nil {
-				//log.Debugf("recv | id: %d; size: %d; data: %s", c.Request().ID(), len(c.Request().Data()), req)
-			}
-			defer func() {
-				respMsg := c.Response()
-				if respMsg != nil {
-					_ = c.Session().Codec().Decode(respMsg.Data(), resp)
-					//log.Infof("send | id: %d; size: %d; data: %s", respMsg.ID(), len(respMsg.Data()), resp)
-				}
-			}()
-			next(c)
-		}
-	}
 }
 
 // 会话创建回调
@@ -210,7 +177,7 @@ func (ts *TCPServer) AddRoute(msgID packer.ID, handler easytcp.HandlerFunc, midd
 	}
 }
 
-// log 内部日志记录方法
+// 内部日志记录方法
 func (ts *TCPServer) log(level, message string) {
 	if ts.OnLog != nil {
 		ts.OnLog(level, message)
