@@ -63,7 +63,7 @@ func (c CustomTheme) Size(name fyne.ThemeSizeName) float32 {
 // 玩家结构体
 type Player struct {
 	SessionID     string
-	DeviceIdID    string
+	DeviceID      string
 	Remark        string
 	Port          int
 	TotalUpload   int64
@@ -306,7 +306,7 @@ func (cm *ConfigManager) WaitForDebounced() {
 	cm.debounceWg.Wait()
 }
 
-// UDPRelay 表示一个UDP中继服务器
+// 表示一个UDP中继服务器
 type UDPRelay struct {
 	listenPort   int
 	targetHost   string
@@ -318,7 +318,7 @@ type UDPRelay struct {
 	logCallback  func(string)
 }
 
-// NewUDPRelay 创建一个新的UDP中继实例
+// 创建一个新的UDP中继实例
 func NewUDPRelay(listenPort int, targetHost string, targetPort int, logCallback func(string)) *UDPRelay {
 	return &UDPRelay{
 		listenPort:  listenPort,
@@ -541,6 +541,7 @@ type UDPRelayApp struct {
 	players                   []*Player
 	playersMutex              sync.RWMutex
 	advancedStringIncrementer *utils.AdvancedStringIncrementer
+	serviceId                 string
 }
 
 // NewUDPRelayApp 创建新的GUI应用程序
@@ -620,7 +621,7 @@ func (ua *UDPRelayApp) createUI() {
 			defer ua.playersMutex.Unlock()
 			player := &Player{
 				SessionID:     sessionID,
-				DeviceIdID:    "",
+				DeviceID:      "",
 				Remark:        "", // 初始备注为空
 				Port:          0,  // 初始端口为0，后续可更新
 				TotalUpload:   0,
@@ -706,6 +707,102 @@ func (ua *UDPRelayApp) createUI() {
 					return
 				}
 				*uploadBytesSize = *uploadBytesSize + int64(sendBytesSize)
+				ua.playersMutex.Lock()
+				defer ua.playersMutex.Unlock()
+				for index, player := range ua.players {
+					if player.SessionID == sessionID {
+						player.DeviceID = nextDeviceId
+						remark, err := ua.configManager.GetDeviceServiceRemark(nextDeviceId, "")
+						if err == nil {
+							player.Remark = remark
+						} else {
+							player.Remark = ""
+						}
+						fyne.Do(func() {
+							ua.refreshPlayerTableItem(index+1, 0) // 刷新表格显示
+						})
+						break
+					}
+				}
+			} else {
+				_, privateKey, _, err := ua.configManager.GetKeyPairByID(int(reqData.Index))
+				if err == nil {
+					encryptedData, err := base64.StdEncoding.DecodeString(reqData.AuthenticationId)
+					if err == nil {
+						authenticationId, err := DecryptWithPrivateKey(privateKey, encryptedData)
+						if err == nil {
+							authentication, err := ua.configManager.GetDeviceAuthentication(reqData.DeviceId)
+							if err == nil && string(authenticationId) == authentication {
+								ua.playersMutex.Lock()
+								defer ua.playersMutex.Unlock()
+								req := &packer.AllUserInfoPackage{
+									UserDataList: []*packer.AllUserInfoPackage_UserData{},
+								}
+								for index, player := range ua.players {
+									if player.SessionID == sessionID {
+										player.DeviceID = reqData.DeviceId
+										remark, err := ua.configManager.GetDeviceServiceRemark(reqData.DeviceId, "")
+										if err == nil {
+											player.Remark = remark
+										} else {
+											player.Remark = ""
+										}
+										fyne.Do(func() {
+											ua.refreshPlayerTableItem(index+1, 0)
+										})
+									}
+									if player.DeviceID != "" {
+										req.UserDataList = append(req.UserDataList, &packer.AllUserInfoPackage_UserData{
+											DeviceId: player.DeviceID,
+											Port:     int32(player.Port),
+										})
+									}
+								}
+								packedMsg, err := ua.tcpService.PackerData(packer.ID_AllUserInfoPackageID, req)
+								if err != nil {
+									fyne.Do(func() {
+										ua.appendLog(fmt.Sprintf("打包用户信息包失败: %v", err))
+									})
+									return
+								}
+								sendBytesSize := int64(len(packedMsg))
+								for _, player := range ua.players {
+									if player.DeviceID != "" {
+										err := ua.tcpService.SendRawToSession(player.SessionID, packedMsg)
+										if err != nil {
+											fyne.Do(func() {
+												ua.appendLog(fmt.Sprintf("发送用户信息包失败: %v", err))
+											})
+											continue
+										}
+										player.TotalUpload += sendBytesSize
+									}
+								}
+								return
+							}
+						}
+					}
+				}
+				serviceId, _, publicKey, err := ua.configManager.GetKeyPairByID(int(reqData.Index) + 1)
+				if err != nil {
+					fyne.Do(func() {
+						ua.appendLog(fmt.Sprintf("获取密钥对失败: %v", err))
+					})
+					return
+				}
+				req := &packer.ServiceIdPackage{
+					Index:     reqData.Index + 1,
+					ServiceId: serviceId,
+					PublicKey: publicKey,
+				}
+				sendBytesSize, err := ua.tcpService.SendToSession(sessionID, packer.ID_ServiceIdPackageID, req)
+				if err != nil {
+					fyne.Do(func() {
+						ua.appendLog(fmt.Sprintf("发送密钥对失败: %v", err))
+					})
+					return
+				}
+				*uploadBytesSize = int64(sendBytesSize)
 			}
 
 			//err := ctx.SetResponse(common.ID_FooRespID, &common.FooResp{
@@ -725,7 +822,7 @@ func (ua *UDPRelayApp) createUI() {
 		ua.players = []*Player{
 			{
 				SessionID:     "",
-				DeviceIdID:    "A",
+				DeviceID:      "A",
 				Remark:        "",
 				Port:          8080,
 				TotalUpload:   0,
@@ -790,6 +887,8 @@ func (ua *UDPRelayApp) createUI() {
 				})
 				return
 			}
+
+			ua.serviceId = respData.ServiceId
 			authCode, deviceId, err := ua.configManager.GetServerByServiceId(respData.ServiceId)
 			authenticationId := ""
 			if err != nil {
@@ -821,6 +920,142 @@ func (ua *UDPRelayApp) createUI() {
 				return
 			}
 			*uploadBytesSize = int64(sendBytesSize)
+			ua.playersMutex.Lock()
+			defer ua.playersMutex.Unlock()
+			ua.players[0].DeviceID = deviceId
+			remark, err := ua.configManager.GetDeviceServiceRemark(deviceId, ua.serviceId)
+			if err == nil {
+				ua.players[0].Remark = remark
+			} else {
+				ua.players[0].Remark = ""
+			}
+			fyne.Do(func() {
+				ua.refreshPlayerTableItem(1, 0)
+			})
+		})
+		ua.tcpClient.AddHandler(packer.ID_ConfirmRegisterPackageID, func(m *easytcp.Message) {
+			uploadBytesSize := new(int64)
+			downloadBytesSize := new(int64)
+			*uploadBytesSize = 0
+			data := m.Data()
+			*downloadBytesSize = int64(len(data) + 8)
+			defer ua.UpdatePlayerTrafficByDeviceIdID("A", uploadBytesSize, downloadBytesSize)
+			var respData packer.ConfirmRegisterPackage
+			if err := ua.tcpClient.Codec.Decode(data, &respData); err != nil {
+				fyne.Do(func() {
+					ua.appendLog(fmt.Sprintf("错误：解析服务ID包失败: %v", err))
+				})
+				return
+			}
+
+			ua.configManager.InsertServer(ua.serviceId, respData.AuthenticationId, respData.DeviceId)
+			remark, err := ua.configManager.GetDeviceServiceRemark(respData.DeviceId, ua.serviceId)
+			ua.playersMutex.Lock()
+			ua.players[0].DeviceID = respData.DeviceId
+			if err == nil {
+				ua.players[0].Remark = remark
+			} else {
+				ua.players[0].Remark = ""
+			}
+			ua.playersMutex.Unlock()
+			fyne.Do(func() {
+				ua.refreshPlayerTableItem(1, 0)
+			})
+		})
+		ua.tcpClient.AddHandler(packer.ID_AllUserInfoPackageID, func(m *easytcp.Message) {
+			uploadBytesSize := new(int64)
+			downloadBytesSize := new(int64)
+			*uploadBytesSize = 0
+			data := m.Data()
+			*downloadBytesSize = int64(len(data) + 8)
+			defer ua.UpdatePlayerTrafficByDeviceIdID("A", uploadBytesSize, downloadBytesSize)
+			var respData packer.AllUserInfoPackage
+			if err := ua.tcpClient.Codec.Decode(data, &respData); err != nil {
+				fyne.Do(func() {
+					ua.appendLog(fmt.Sprintf("错误：解析服务ID包失败: %v", err))
+				})
+				return
+			}
+
+			// 根据服务器发送的玩家数据更新本地玩家列表
+			ua.playersMutex.Lock()
+			defer ua.playersMutex.Unlock()
+
+			// 获取本地玩家的设备ID
+			localDeviceId := ""
+			if len(ua.players) > 0 {
+				localDeviceId = ua.players[0].DeviceID
+			}
+
+			// 创建设备ID到玩家数据的映射，便于查找
+			serverPlayers := make(map[string]*packer.AllUserInfoPackage_UserData)
+			for _, userData := range respData.UserDataList {
+				// 跳过本地玩家，避免重复添加
+				if userData.DeviceId == localDeviceId {
+					ua.players[0].Port = int(userData.Port)
+					continue
+				}
+				serverPlayers[userData.DeviceId] = userData
+			}
+
+			// 处理本地玩家列表：删除、修改、新增
+			var updatedPlayers []*Player
+
+			// 首先保留本地玩家（索引0）
+			if len(ua.players) > 0 {
+				localPlayer := ua.players[0]
+				updatedPlayers = append(updatedPlayers, localPlayer)
+			}
+
+			// 处理服务器返回的玩家数据
+			for deviceId, serverPlayer := range serverPlayers {
+				// 查找是否已存在该玩家
+				found := false
+				for i := 1; i < len(ua.players); i++ { // 从1开始，跳过本地玩家
+					if ua.players[i].DeviceID == deviceId {
+						// 更新现有玩家信息
+						ua.players[i].Port = int(serverPlayer.Port)
+						updatedPlayers = append(updatedPlayers, ua.players[i])
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					// 新增玩家
+					newPlayer := &Player{
+						SessionID:     "",
+						DeviceID:      deviceId,
+						Remark:        "",
+						Port:          int(serverPlayer.Port),
+						TotalUpload:   0,
+						TotalDownload: 0,
+						LastUpload:    0,
+						LastDownload:  0,
+						UploadSpeed:   "0.00 B/s",
+						DownloadSpeed: "0.00 B/s",
+						Ping:          0,
+					}
+
+					// 尝试从数据库加载备注
+					if ua.configManager != nil {
+						remark, err := ua.configManager.GetDeviceServiceRemark(deviceId, ua.serviceId)
+						if err == nil {
+							newPlayer.Remark = remark
+						}
+					}
+
+					updatedPlayers = append(updatedPlayers, newPlayer)
+				}
+			}
+
+			// 更新玩家列表
+			ua.players = updatedPlayers
+
+			// 刷新表格显示
+			fyne.Do(func() {
+				ua.refreshPlayerTable()
+			})
 		})
 		err := ua.tcpClient.Connect(targetHost)
 		if err != nil {
@@ -831,7 +1066,7 @@ func (ua *UDPRelayApp) createUI() {
 		ua.players = []*Player{
 			{
 				SessionID:     "",
-				DeviceIdID:    "",
+				DeviceID:      "",
 				Remark:        "",
 				Port:          0,
 				TotalUpload:   0,
@@ -1008,7 +1243,7 @@ func (ua *UDPRelayApp) createPlayerTable() {
 					if player.Remark != "" {
 						label.SetText(player.Remark)
 					} else {
-						label.SetText(player.DeviceIdID)
+						label.SetText(player.DeviceID)
 					}
 				case 1:
 					label.SetText(strconv.Itoa(player.Port))
@@ -1108,7 +1343,7 @@ func (ua *UDPRelayApp) UpdatePlayerTrafficByDeviceIdID(deviceIdID string, upload
 	defer ua.playersMutex.RUnlock()
 
 	for index, player := range ua.players {
-		if index == 0 || player.DeviceIdID == deviceIdID {
+		if index == 0 || player.DeviceID == deviceIdID {
 			player.TotalUpload = player.TotalUpload + *uploadBytes
 			player.TotalDownload = player.TotalDownload + *downloadBytes
 		}

@@ -76,6 +76,19 @@ func (ts *TCPServer) IsRunning() bool {
 	return ts.isRunning
 }
 
+// 打包数据
+func (ts *TCPServer) PackerData(msgID packer.ID, v any) ([]byte, error) {
+	data, err := ts.service.Codec.Encode(v)
+	if err != nil {
+		return nil, err
+	}
+	packedMsg, err := ts.service.Packer.Pack(easytcp.NewMessage(msgID, data))
+	if err != nil {
+		return nil, err
+	}
+	return packedMsg, nil
+}
+
 // 向指定会话发送原始数据
 func (ts *TCPServer) SendRawToSession(sessionID string, data []byte) error {
 	ts.mu.RLock()
@@ -94,11 +107,7 @@ func (ts *TCPServer) SendRawToSession(sessionID string, data []byte) error {
 
 // 向指定会话发送数据
 func (ts *TCPServer) SendToSession(sessionID string, msgID packer.ID, v any) (int, error) {
-	data, err := ts.service.Codec.Encode(v)
-	if err != nil {
-		panic(err)
-	}
-	packedMsg, err := ts.service.Packer.Pack(easytcp.NewMessage(msgID, data))
+	packedMsg, err := ts.PackerData(msgID, v)
 	if err != nil {
 		return 0, err
 	}
