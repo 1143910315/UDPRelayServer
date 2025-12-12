@@ -821,7 +821,7 @@ func (ua *UDPRelayApp) createUI() {
 								} else if player.Port == udpConfig.Port {
 									req := &packer.ForwardPackage{
 										Port:  int32(ua.players[0].Port),
-										Bytes: reqData.Bytes,
+										Bytes: data,
 									}
 									sendBytesSize, err := ua.tcpService.SendToSession(player.SessionID, packer.ID_ForwardPackageID, req)
 									if err != nil {
