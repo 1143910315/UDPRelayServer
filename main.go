@@ -399,6 +399,7 @@ type UDPRelayApp struct {
 	advancedStringIncrementer *utils.AdvancedStringIncrementer
 	serviceId                 string
 	listenPort                int
+	targetPort                int
 	reservePort               map[string]int
 	udpRelay                  map[int]*udp.UDPService
 }
@@ -431,18 +432,18 @@ func NewUDPRelayApp() *UDPRelayApp {
 // createUI 创建用户界面
 func (ua *UDPRelayApp) createUI() {
 	// 创建输入字段
-	listenAddressEntry := widget.NewEntry()
+	listenPortEntry := widget.NewEntry()
 	targetHostEntry := widget.NewEntry()
 	targetPortEntry := widget.NewEntry()
 
 	// 从数据库加载配置，如果失败则使用默认值
 	if ua.configManager != nil {
-		listenAddressEntry.SetText(ua.configManager.GetConfig("listen_port", "8080"))
+		listenPortEntry.SetText(ua.configManager.GetConfig("listen_port", "8080"))
 		targetHostEntry.SetText(ua.configManager.GetConfig("target_host", "127.0.0.1:8080"))
 		targetPortEntry.SetText(ua.configManager.GetConfig("target_port", "8081"))
 
 		// 设置配置保存回调
-		listenAddressEntry.OnChanged = func(text string) {
+		listenPortEntry.OnChanged = func(text string) {
 			ua.configManager.SetConfigDebounced("listen_port", text)
 		}
 		targetHostEntry.OnChanged = func(text string) {
@@ -452,24 +453,30 @@ func (ua *UDPRelayApp) createUI() {
 			ua.configManager.SetConfigDebounced("target_port", text)
 		}
 	} else {
-		listenAddressEntry.SetText("8080")
+		listenPortEntry.SetText("8080")
 		targetHostEntry.SetText("127.0.0.1:8080")
 		targetPortEntry.SetText("8081")
 	}
 
-	listenAddressEntry.SetPlaceHolder("监听端口")
+	listenPortEntry.SetPlaceHolder("监听端口")
 	targetHostEntry.SetPlaceHolder("目标主机")
 	targetPortEntry.SetPlaceHolder("游戏端口")
 
 	// 主机模式按钮
 	ua.startBtn = widget.NewButton("启动服务器", func() {
-		listenAddress := strings.TrimSpace(listenAddressEntry.Text)
-		listenPort, err := strconv.Atoi(listenAddress)
+		listenPortText := strings.TrimSpace(listenPortEntry.Text)
+		listenPort, err := strconv.Atoi(listenPortText)
 		if err != nil || listenPort < 1 || listenPort > 65535 {
 			ua.appendLog("错误: 监听端口必须是 1-65535 之间的数字")
 			return
 		}
+		targetPort, err := strconv.Atoi(strings.TrimSpace(targetPortEntry.Text))
+		if err != nil || targetPort < 1 || targetPort > 65535 {
+			ua.appendLog("错误: 游戏端口必须是 1-65535 之间的数字")
+			return
+		}
 		ua.listenPort = listenPort
+		ua.targetPort = targetPort
 
 		ua.tcpService = tcp.NewTCPServer()
 		ua.tcpService.OnClientConnected = func(sessionID string) {
@@ -677,8 +684,8 @@ func (ua *UDPRelayApp) createUI() {
 									return
 								}
 								sendBytesSize := len(packedMsg)
-								for _, player := range ua.players {
-									if player.DeviceID != "" {
+								for index, player := range ua.players {
+									if player.DeviceID != "" && index != 0 {
 										err := ua.tcpService.SendRawToSession(player.SessionID, packedMsg)
 										if err != nil {
 											fyne.Do(func() {
@@ -829,7 +836,12 @@ func (ua *UDPRelayApp) createUI() {
 								}
 							}
 						})
-						relay.Start()
+						err := relay.Start()
+						if err != nil {
+							fyne.Do(func() {
+								ua.appendLog(fmt.Sprintf("启动UDP中继失败: %v", err))
+							})
+						}
 						ua.udpRelay[player.Port] = relay
 					}
 					fyne.Do(func() {
@@ -838,7 +850,7 @@ func (ua *UDPRelayApp) createUI() {
 				}
 			}
 		})
-		err = ua.tcpService.Start(":" + listenAddress)
+		err = ua.tcpService.Start(":" + listenPortText)
 		if err != nil {
 			ua.appendLog(fmt.Sprintf("启动TCP服务器失败: %v", err))
 			return
@@ -849,7 +861,7 @@ func (ua *UDPRelayApp) createUI() {
 				SessionID:     "",
 				DeviceID:      "A",
 				Remark:        "",
-				Port:          8080,
+				Port:          ua.targetPort,
 				TotalUpload:   0,
 				TotalDownload: 0,
 				LastUpload:    0,
@@ -862,11 +874,11 @@ func (ua *UDPRelayApp) createUI() {
 		ua.playersMutex.Unlock()
 		ua.refreshPlayerTable()
 
-		ua.appendLog(fmt.Sprintf("信息：TCP服务器启动成功，监听 %s", listenAddress))
+		ua.appendLog(fmt.Sprintf("信息：TCP服务器启动成功，监听 %s", listenPortText))
 
 		ua.startBtn.Disable()
 		ua.stopBtn.Enable()
-		listenAddressEntry.Disable()
+		listenPortEntry.Disable()
 		targetPortEntry.Disable()
 	})
 
@@ -887,7 +899,7 @@ func (ua *UDPRelayApp) createUI() {
 		ua.startBtn.Enable()
 		ua.stopBtn.Disable()
 
-		listenAddressEntry.Enable()
+		listenPortEntry.Enable()
 		targetPortEntry.Enable()
 	})
 	ua.stopBtn.Disable()
@@ -1021,6 +1033,10 @@ func (ua *UDPRelayApp) createUI() {
 				// 跳过本地玩家，避免重复添加
 				if userData.DeviceId == localDeviceId {
 					ua.players[0].Port = int(userData.Port)
+					if udpRelay, ok := ua.udpRelay[ua.players[0].Port]; ok {
+						udpRelay.Stop()
+						delete(ua.udpRelay, ua.players[0].Port)
+					}
 					continue
 				}
 				serverPlayers[userData.DeviceId] = userData
@@ -1043,8 +1059,93 @@ func (ua *UDPRelayApp) createUI() {
 					if ua.players[i].DeviceID == deviceId {
 						// 更新现有玩家信息
 						ua.players[i].Port = int(serverPlayer.Port)
+						if _, ok := ua.udpRelay[ua.players[i].Port]; !ok {
+							udpConfig := udp.DefaultConfig()
+							udpConfig.Port = ua.players[i].Port
+							// 尝试启动UDP中继
+							relay := udp.NewUDPService(udpConfig)
+							relay.SetDataCallback(func(data []byte, addr *net.UDPAddr) {
+								uploadBytesSize := new(int64)
+								downloadBytesSize := new(int64)
+								*uploadBytesSize = 0
+								*downloadBytesSize = 0
+								defer ua.UpdatePlayerTrafficByDeviceId("A", uploadBytesSize, downloadBytesSize)
+								ua.playersMutex.Lock()
+								defer ua.playersMutex.Unlock()
+								for index, player := range ua.players {
+									if index == 0 {
+										if player.Port != addr.Port {
+											player.Port = addr.Port
+											req := &packer.BindPortPackage{
+												Port: int32(player.Port),
+											}
+											sendBytesSize, err := ua.tcpClient.Send(packer.ID_BindPortPackageID, req)
+											if err != nil {
+												fyne.Do(func() {
+													ua.appendLog(fmt.Sprintf("错误：发送绑定端口失败: %v", err))
+												})
+												return
+											}
+											*uploadBytesSize = *uploadBytesSize + int64(sendBytesSize)
+										}
+									} else if player.Port == udpConfig.Port {
+										req := &packer.ForwardPackage{
+											Port:  int32(udpConfig.Port),
+											Bytes: data,
+										}
+										sendBytesSize, err := ua.tcpClient.Send(packer.ID_ForwardPackageID, req)
+										if err != nil {
+											fyne.Do(func() {
+												ua.appendLog(fmt.Sprintf("转发数据给 %d 失败: %v", udpConfig.Port, err))
+											})
+											return
+										}
+										player.TotalUpload += int64(sendBytesSize)
+										ua.players[0].TotalUpload += int64(sendBytesSize)
+										break
+									}
+								}
+							})
+							err := relay.Start()
+							if err != nil {
+								fyne.Do(func() {
+									ua.appendLog(fmt.Sprintf("错误：启动端口 %d 的UDP中继失败: %v", udpConfig.Port, err))
+								})
+							}
+							ua.udpRelay[ua.players[i].Port] = relay
+						}
+						updatedPlayers = append(updatedPlayers, ua.players[i])
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					// 新增玩家
+					newPlayer := &Player{
+						SessionID:     "",
+						DeviceID:      deviceId,
+						Remark:        "",
+						Port:          int(serverPlayer.Port),
+						TotalUpload:   0,
+						TotalDownload: 0,
+						LastUpload:    0,
+						LastDownload:  0,
+						UploadSpeed:   "0.00 B/s",
+						DownloadSpeed: "0.00 B/s",
+						Ping:          0,
+					}
+
+					// 尝试从数据库加载备注
+					if ua.configManager != nil {
+						remark, err := ua.configManager.GetDeviceServiceRemark(deviceId, ua.serviceId)
+						if err == nil {
+							newPlayer.Remark = remark
+						}
+					}
+					if _, ok := ua.udpRelay[newPlayer.Port]; !ok {
 						udpConfig := udp.DefaultConfig()
-						udpConfig.Port = ua.players[i].Port
+						udpConfig.Port = newPlayer.Port
 						// 尝试启动UDP中继
 						relay := udp.NewUDPService(udpConfig)
 						relay.SetDataCallback(func(data []byte, addr *net.UDPAddr) {
@@ -1095,35 +1196,7 @@ func (ua *UDPRelayApp) createUI() {
 								ua.appendLog(fmt.Sprintf("错误：启动端口 %d 的UDP中继失败: %v", udpConfig.Port, err))
 							})
 						}
-						ua.udpRelay[ua.players[i].Port] = relay
-						updatedPlayers = append(updatedPlayers, ua.players[i])
-						found = true
-						break
-					}
-				}
-
-				if !found {
-					// 新增玩家
-					newPlayer := &Player{
-						SessionID:     "",
-						DeviceID:      deviceId,
-						Remark:        "",
-						Port:          int(serverPlayer.Port),
-						TotalUpload:   0,
-						TotalDownload: 0,
-						LastUpload:    0,
-						LastDownload:  0,
-						UploadSpeed:   "0.00 B/s",
-						DownloadSpeed: "0.00 B/s",
-						Ping:          0,
-					}
-
-					// 尝试从数据库加载备注
-					if ua.configManager != nil {
-						remark, err := ua.configManager.GetDeviceServiceRemark(deviceId, ua.serviceId)
-						if err == nil {
-							newPlayer.Remark = remark
-						}
+						ua.udpRelay[newPlayer.Port] = relay
 					}
 
 					updatedPlayers = append(updatedPlayers, newPlayer)
@@ -1212,6 +1285,15 @@ func (ua *UDPRelayApp) createUI() {
 	ua.disconnectBtn = widget.NewButton("断开服务器", func() {
 		ua.tcpClient.Disconnect()
 		ua.tcpClient = nil
+		ua.playersMutex.Lock()
+		ua.players = make([]*Player, 0)
+		ua.playersMutex.Unlock()
+		// 停止所有UDP中继服务器
+		for port, relay := range ua.udpRelay {
+			relay.Stop()
+			delete(ua.udpRelay, port)
+		}
+		ua.refreshPlayerTable()
 		ua.appendLog("信息：断开服务器连接")
 		ua.connectBtn.Enable()
 		ua.disconnectBtn.Disable()
@@ -1235,7 +1317,7 @@ func (ua *UDPRelayApp) createUI() {
 
 	// 主机模式的内容
 	hostContent := container.NewVBox(
-		container.NewBorder(nil, nil, widget.NewLabel("监听端口"), nil, listenAddressEntry),
+		container.NewBorder(nil, nil, widget.NewLabel("监听端口"), nil, listenPortEntry),
 		container.NewBorder(nil, nil, widget.NewLabel("游戏端口"), nil, targetPortEntry),
 		container.NewHBox(ua.startBtn, ua.stopBtn),
 	)
@@ -1312,8 +1394,8 @@ func (ua *UDPRelayApp) allocatePortAndStartRelay(deviceId string) (int, error) {
 	}
 
 	udpConfig := udp.DefaultConfig()
-	// 查找可用端口（从监听端口+1开始）
-	startPort := ua.listenPort + 1
+	// 查找可用端口（从游戏端口+1开始）
+	startPort := ua.targetPort + 1
 	for port := startPort; port < startPort+100; port++ {
 		if _, exists := ua.udpRelay[port]; !exists {
 			udpConfig.Port = port
@@ -1357,7 +1439,9 @@ func (ua *UDPRelayApp) allocatePortAndStartRelay(deviceId string) (int, error) {
 			ua.reservePort[deviceId] = port
 			ua.udpRelay[port] = relay
 
-			ua.appendLog(fmt.Sprintf("为设备 %s 分配端口 %d，启动UDP中继", deviceId, port))
+			fyne.Do(func() {
+				ua.appendLog(fmt.Sprintf("为设备 %s 分配端口 %d，启动UDP中继", deviceId, port))
+			})
 			return port, nil
 		}
 	}
