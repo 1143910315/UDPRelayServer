@@ -620,8 +620,8 @@ func (ua *UDPRelayApp) createUI() {
 					return
 				}
 				sendBytesSize = len(packedMsg)
-				for _, player := range ua.players {
-					if player.DeviceID != "" {
+				for index, player := range ua.players {
+					if player.DeviceID != "" && index != 0 {
 						err := ua.tcpService.SendRawToSession(player.SessionID, packedMsg)
 						if err != nil {
 							fyne.Do(func() {
@@ -629,6 +629,7 @@ func (ua *UDPRelayApp) createUI() {
 							})
 							continue
 						}
+						ua.players[0].TotalUpload += int64(sendBytesSize)
 						player.TotalUpload += int64(sendBytesSize)
 					}
 				}
@@ -802,6 +803,9 @@ func (ua *UDPRelayApp) createUI() {
 
 			ua.playersMutex.Lock()
 			defer ua.playersMutex.Unlock()
+			req := &packer.AllUserInfoPackage{
+				UserDataList: []*packer.AllUserInfoPackage_UserData{},
+			}
 			for index, player := range ua.players {
 				if player.SessionID == sessionID {
 					player.Port = int(reqData.Port)
@@ -847,6 +851,33 @@ func (ua *UDPRelayApp) createUI() {
 					fyne.Do(func() {
 						ua.refreshPlayerTableItem(index+1, 1)
 					})
+				}
+				if player.DeviceID != "" {
+					req.UserDataList = append(req.UserDataList, &packer.AllUserInfoPackage_UserData{
+						DeviceId: player.DeviceID,
+						Port:     int32(player.Port),
+					})
+				}
+			}
+			packedMsg, err := ua.tcpService.PackerData(packer.ID_AllUserInfoPackageID, req)
+			if err != nil {
+				fyne.Do(func() {
+					ua.appendLog(fmt.Sprintf("打包用户信息包失败: %v", err))
+				})
+				return
+			}
+			sendBytesSize := len(packedMsg)
+			for index, player := range ua.players {
+				if player.DeviceID != "" && index != 0 {
+					err := ua.tcpService.SendRawToSession(player.SessionID, packedMsg)
+					if err != nil {
+						fyne.Do(func() {
+							ua.appendLog(fmt.Sprintf("发送用户信息包失败: %v", err))
+						})
+						continue
+					}
+					ua.players[0].TotalUpload += int64(sendBytesSize)
+					player.TotalUpload += int64(sendBytesSize)
 				}
 			}
 		})
