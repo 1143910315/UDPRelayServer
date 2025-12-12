@@ -8,7 +8,7 @@ import (
 	"github.com/DarthPestilane/easytcp"
 )
 
-// TCPServer TCP服务器组件
+// TCP服务器组件
 type TCPServer struct {
 	service              *easytcp.Server
 	sessions             map[string]easytcp.Session // 保存活跃会话
