@@ -922,6 +922,10 @@ func (ua *UDPRelayApp) createUI() {
 		}
 		// 清空端口分配记录
 		ua.reservePort = make(map[string]int)
+		ua.playersMutex.Lock()
+		ua.players = []*Player{}
+		ua.playersMutex.Unlock()
+		ua.refreshPlayerTable()
 
 		if ua.tcpService != nil {
 			ua.tcpService.Stop()

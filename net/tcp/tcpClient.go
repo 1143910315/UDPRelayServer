@@ -163,7 +163,7 @@ func (tc *TCPClient) reconnectLoop() {
 			conn, err := net.Dial("tcp", tc.addr)
 			if err != nil {
 				tc.mu.Unlock()
-				tc.log("WARN", fmt.Sprintf("Reconnect failed: %v", err))
+				// tc.log("WARN", fmt.Sprintf("Reconnect failed: %v", err))
 				continue
 			}
 
