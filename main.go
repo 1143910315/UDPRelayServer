@@ -612,7 +612,7 @@ func (ua *UDPRelayApp) createUI() {
 						})
 					}
 				}
-				packedMsg, err := ua.tcpService.PackerData(packer.ID_AllUserInfoPackageID, req)
+				packedMsg, err := ua.tcpService.PackerData(packer.ID_AllUserInfoPackageID, req1)
 				if err != nil {
 					fyne.Do(func() {
 						ua.appendLog(fmt.Sprintf("打包用户信息包失败: %v", err))
@@ -694,6 +694,7 @@ func (ua *UDPRelayApp) createUI() {
 											})
 											continue
 										}
+										ua.players[0].TotalUpload += int64(sendBytesSize)
 										player.TotalUpload += int64(sendBytesSize)
 									}
 								}
@@ -1631,7 +1632,7 @@ func formatSpeed(bytes int64) string {
 
 // 根据sessionID更新玩家流量统计
 func (ua *UDPRelayApp) UpdatePlayerTrafficBySessionID(sessionID string, uploadBytes *int64, downloadBytes *int64) {
-	if uploadBytes == nil || downloadBytes == nil {
+	if *uploadBytes == 0 && *downloadBytes == 0 {
 		return
 	}
 
@@ -1648,7 +1649,7 @@ func (ua *UDPRelayApp) UpdatePlayerTrafficBySessionID(sessionID string, uploadBy
 
 // 根据DeviceId更新玩家流量统计
 func (ua *UDPRelayApp) UpdatePlayerTrafficByDeviceId(deviceId string, uploadBytes *int64, downloadBytes *int64) {
-	if uploadBytes == nil || downloadBytes == nil {
+	if *uploadBytes == 0 && *downloadBytes == 0 {
 		return
 	}
 
