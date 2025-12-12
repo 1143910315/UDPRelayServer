@@ -371,9 +371,9 @@ func (s *UDPService) Stop() error {
 }
 
 // 获取服务运行状态
-func (s *UDPService) IsRunning() string {
+func (s *UDPService) IsRunning() bool {
 	if s.isRunning.Load() {
-		return "running"
+		return true
 	}
-	return "stopped"
+	return false
 }

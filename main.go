@@ -1302,8 +1302,15 @@ func (ua *UDPRelayApp) createUI() {
 func (ua *UDPRelayApp) allocatePortAndStartRelay(deviceId string) (int, error) {
 	// 检查是否已为该设备分配端口
 	if port, exists := ua.reservePort[deviceId]; exists {
-		return port, nil
+		// 检查UDP中继是否还在运行
+		if relay, ok := ua.udpRelay[port]; ok && relay.IsRunning() {
+			return port, nil
+		}
+		// 如果中继已停止，删除记录重新分配
+		delete(ua.reservePort, deviceId)
+		delete(ua.udpRelay, port)
 	}
+
 	udpConfig := udp.DefaultConfig()
 	// 查找可用端口（从监听端口+1开始）
 	startPort := ua.listenPort + 1
@@ -1317,6 +1324,8 @@ func (ua *UDPRelayApp) allocatePortAndStartRelay(deviceId string) (int, error) {
 				// 端口可能被占用，尝试下一个
 				continue
 			}
+
+			localPort := port
 			relay.SetDataCallback(func(data []byte, addr *net.UDPAddr) {
 				ua.playersMutex.Lock()
 				defer ua.playersMutex.Unlock()
@@ -1325,7 +1334,7 @@ func (ua *UDPRelayApp) allocatePortAndStartRelay(deviceId string) (int, error) {
 						if player.Port != addr.Port {
 
 						}
-					} else if player.Port == udpConfig.Port {
+					} else if player.Port == localPort {
 						req := &packer.ForwardPackage{
 							Port:  int32(addr.Port),
 							Bytes: data,
@@ -1507,31 +1516,34 @@ func formatSpeed(bytes int64) string {
 
 // 根据sessionID更新玩家流量统计
 func (ua *UDPRelayApp) UpdatePlayerTrafficBySessionID(sessionID string, uploadBytes *int64, downloadBytes *int64) {
-	if *uploadBytes != 0 || *downloadBytes != 0 {
-		ua.playersMutex.RLock()
-		defer ua.playersMutex.RUnlock()
+	if uploadBytes == nil || downloadBytes == nil {
+		return
+	}
 
-		for index, player := range ua.players {
-			if index == 0 || player.SessionID == sessionID {
-				player.TotalUpload = player.TotalUpload + *uploadBytes
-				player.TotalDownload = player.TotalDownload + *downloadBytes
-			}
+	ua.playersMutex.Lock()
+	defer ua.playersMutex.Unlock()
+
+	for index, player := range ua.players {
+		if index == 0 || player.SessionID == sessionID {
+			player.TotalUpload += *uploadBytes
+			player.TotalDownload += *downloadBytes
 		}
 	}
 }
 
-// 根据DeviceIdID更新玩家流量统计
-func (ua *UDPRelayApp) UpdatePlayerTrafficByDeviceId(deviceIdID string, uploadBytes *int64, downloadBytes *int64) {
-	if *uploadBytes <= 0 && *downloadBytes <= 0 {
+// 根据DeviceId更新玩家流量统计
+func (ua *UDPRelayApp) UpdatePlayerTrafficByDeviceId(deviceId string, uploadBytes *int64, downloadBytes *int64) {
+	if uploadBytes == nil || downloadBytes == nil {
 		return
 	}
-	ua.playersMutex.RLock()
-	defer ua.playersMutex.RUnlock()
+
+	ua.playersMutex.Lock()
+	defer ua.playersMutex.Unlock()
 
 	for index, player := range ua.players {
-		if index == 0 || player.DeviceID == deviceIdID {
-			player.TotalUpload = player.TotalUpload + *uploadBytes
-			player.TotalDownload = player.TotalDownload + *downloadBytes
+		if index == 0 || player.DeviceID == deviceId {
+			player.TotalUpload += *uploadBytes
+			player.TotalDownload += *downloadBytes
 		}
 	}
 }
