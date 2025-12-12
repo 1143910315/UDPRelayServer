@@ -2,7 +2,6 @@ package packer
 
 import (
 	"encoding/binary"
-	"fmt"
 	"github.com/DarthPestilane/easytcp"
 	"io"
 )
@@ -29,10 +28,7 @@ func (p *LengthWithIdPacker) Pack(msg *easytcp.Message) ([]byte, error) {
 func (p *LengthWithIdPacker) Unpack(reader io.Reader) (*easytcp.Message, error) {
 	headerBuffer := make([]byte, 4+4)
 	if _, err := io.ReadFull(reader, headerBuffer); err != nil {
-		if err == io.EOF {
-			return nil, err
-		}
-		return nil, fmt.Errorf("read header from reader err: %s", err)
+		return nil, err
 	}
 	totalSize := p.byteOrder().Uint32(headerBuffer[:4]) // read totalSize
 	id := ID(p.byteOrder().Uint32(headerBuffer[4:]))    // read id
@@ -41,7 +37,7 @@ func (p *LengthWithIdPacker) Unpack(reader io.Reader) (*easytcp.Message, error) 
 	dataSize := totalSize - 4 - 4
 	data := make([]byte, dataSize)
 	if _, err := io.ReadFull(reader, data); err != nil {
-		return nil, fmt.Errorf("read data from reader err: %s", err)
+		return nil, err
 	}
 	return easytcp.NewMessage(id, data), nil
 }

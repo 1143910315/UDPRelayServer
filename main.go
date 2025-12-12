@@ -945,6 +945,54 @@ func (ua *UDPRelayApp) createUI() {
 		}
 
 		ua.tcpClient = tcp.NewTCPClient()
+		ua.tcpClient.OnLog = func(level, message string) {
+			fyne.Do(func() {
+				switch level {
+				case "DEBUG":
+					ua.appendLog(fmt.Sprintf("调试: %s", message))
+				case "INFO":
+					ua.appendLog(fmt.Sprintf("信息: %s", message))
+				case "WARN":
+					ua.appendLog(fmt.Sprintf("警告: %s", message))
+				case "ERROR":
+					ua.appendLog(fmt.Sprintf("错误: %s", message))
+				default:
+					ua.appendLog(fmt.Sprintf("未知: %s", message))
+				}
+			})
+
+		}
+		ua.tcpClient.OnConnected = func() {
+			ua.playersMutex.Lock()
+			ua.players = []*Player{
+				{
+					SessionID:     "",
+					DeviceID:      "",
+					Remark:        "",
+					Port:          0,
+					TotalUpload:   0,
+					TotalDownload: 0,
+					LastUpload:    0,
+					LastDownload:  0,
+					UploadSpeed:   "0.00 B/s",
+					DownloadSpeed: "0.00 B/s",
+					Ping:          0,
+				},
+			}
+			ua.playersMutex.Unlock()
+			ua.appendLog(fmt.Sprintf("信息：连接到服务器 %s", targetHost))
+			ua.connectBtn.Disable()
+			ua.disconnectBtn.Enable()
+			targetHostEntry.Disable()
+		}
+		ua.tcpClient.OnDisconnected = func() {
+			ua.playersMutex.Lock()
+			defer ua.playersMutex.Unlock()
+			ua.players = []*Player{}
+			fyne.Do(func() {
+				ua.refreshPlayerTable()
+			})
+		}
 		ua.tcpClient.AddHandler(packer.ID_ServiceIdPackageID, func(m *easytcp.Message) {
 			uploadBytesSize := new(int64)
 			downloadBytesSize := new(int64)
@@ -1292,27 +1340,7 @@ func (ua *UDPRelayApp) createUI() {
 			ua.appendLog(fmt.Sprintf("错误：连接服务器失败: %v", err))
 			return
 		}
-		ua.playersMutex.Lock()
-		ua.players = []*Player{
-			{
-				SessionID:     "",
-				DeviceID:      "",
-				Remark:        "",
-				Port:          0,
-				TotalUpload:   0,
-				TotalDownload: 0,
-				LastUpload:    0,
-				LastDownload:  0,
-				UploadSpeed:   "0.00 B/s",
-				DownloadSpeed: "0.00 B/s",
-				Ping:          0,
-			},
-		}
-		ua.playersMutex.Unlock()
-		ua.appendLog(fmt.Sprintf("信息：连接到服务器 %s", targetHost))
-		ua.connectBtn.Disable()
-		ua.disconnectBtn.Enable()
-		targetHostEntry.Disable()
+
 	})
 	ua.disconnectBtn = widget.NewButton("断开服务器", func() {
 		ua.tcpClient.Disconnect()
