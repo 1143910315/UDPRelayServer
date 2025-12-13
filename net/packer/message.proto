@@ -13,6 +13,8 @@ enum ID {
   ForwardPackageID = 5;
   ServiceIdPackageID = 6;
   SwitchServiceIdPackageID = 7;
+  AddOrUpdateDevicePackageID = 8;
+  RemoveDevicePackageID = 9;
 }
 
 message AllUserInfoPackage {
@@ -22,6 +24,7 @@ message AllUserInfoPackage {
   }
   
   repeated UserData user_data_list = 1;
+  repeated int32 reserved_ports = 2;
 }
 
 message AuthenticationIdPackage {
@@ -56,4 +59,13 @@ message ServiceIdPackage {
 
 message SwitchServiceIdPackage {
   int32 index = 1;
+}
+
+message AddOrUpdateDevicePackage {
+  string device_id = 1;
+  int32 port = 2;
+}
+
+message RemoveDevicePackage {
+  string device_id = 1;
 }

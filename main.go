@@ -1143,61 +1143,7 @@ func (ua *UDPRelayApp) createUI() {
 					if ua.players[i].DeviceID == deviceId {
 						// 更新现有玩家信息
 						ua.players[i].Port = int(serverPlayer.Port)
-						if _, ok := ua.udpRelay[ua.players[i].Port]; !ok {
-							udpConfig := udp.DefaultConfig()
-							udpConfig.Port = ua.players[i].Port
-							// 尝试启动UDP中继
-							relay := udp.NewUDPService(udpConfig)
-							relay.SetDataCallback(func(data []byte, addr *net.UDPAddr) {
-								uploadBytesSize := new(int64)
-								downloadBytesSize := new(int64)
-								*uploadBytesSize = 0
-								*downloadBytesSize = 0
-								defer ua.UpdatePlayerTrafficByDeviceId("A", uploadBytesSize, downloadBytesSize)
-								ua.playersMutex.Lock()
-								defer ua.playersMutex.Unlock()
-								for index, player := range ua.players {
-									if index == 0 {
-										if player.Port != addr.Port {
-											player.Port = addr.Port
-											req := &packer.BindPortPackage{
-												Port: int32(player.Port),
-											}
-											sendBytesSize, err := ua.tcpClient.Send(packer.ID_BindPortPackageID, req)
-											if err != nil {
-												fyne.Do(func() {
-													ua.appendLog(fmt.Sprintf("错误：发送绑定端口失败: %v", err))
-												})
-												return
-											}
-											*uploadBytesSize = *uploadBytesSize + int64(sendBytesSize)
-										}
-									} else if player.Port == udpConfig.Port {
-										req := &packer.ForwardPackage{
-											Port:  int32(udpConfig.Port),
-											Bytes: data,
-										}
-										sendBytesSize, err := ua.tcpClient.Send(packer.ID_ForwardPackageID, req)
-										if err != nil {
-											fyne.Do(func() {
-												ua.appendLog(fmt.Sprintf("转发数据给 %d 失败: %v", udpConfig.Port, err))
-											})
-											return
-										}
-										player.TotalUpload += int64(sendBytesSize)
-										ua.players[0].TotalUpload += int64(sendBytesSize)
-										break
-									}
-								}
-							})
-							err := relay.Start()
-							if err != nil {
-								fyne.Do(func() {
-									ua.appendLog(fmt.Sprintf("错误：启动端口 %d 的UDP中继失败: %v", udpConfig.Port, err))
-								})
-							}
-							ua.udpRelay[ua.players[i].Port] = relay
-						}
+						ua.startUDPRelayOnClient(ua.players[i].Port)
 						updatedPlayers = append(updatedPlayers, ua.players[i])
 						found = true
 						break
@@ -1338,6 +1284,75 @@ func (ua *UDPRelayApp) createUI() {
 			fyne.Do(func() {
 				ua.appendLog(fmt.Sprintf("错误：未找到端口 %d 的UDP中继", port))
 			})
+		})
+		ua.tcpClient.AddHandler(packer.ID_AddOrUpdateDevicePackageID, func(m *easytcp.Message) {
+			uploadBytesSize := new(int64)
+			downloadBytesSize := new(int64)
+			*uploadBytesSize = 0
+			data := m.Data()
+			*downloadBytesSize = int64(len(data) + 8)
+			defer ua.UpdatePlayerTrafficByDeviceId("A", uploadBytesSize, downloadBytesSize)
+			var respData packer.AddOrUpdateDevicePackage
+			if err := ua.tcpClient.Codec.Decode(data, &respData); err != nil {
+				fyne.Do(func() {
+					ua.appendLog(fmt.Sprintf("错误：解析服务ID包失败: %v", err))
+				})
+				return
+			}
+
+			ua.playersMutex.Lock()
+			defer ua.playersMutex.Unlock()
+			ua.startUDPRelayOnClient(int(respData.Port))
+			for _, player := range ua.players {
+				if player.DeviceID == respData.DeviceId {
+					player.Port = int(respData.Port)
+					return
+				}
+			}
+			newPlayer := &Player{
+				SessionID:     "",
+				DeviceID:      respData.DeviceId,
+				Remark:        "",
+				Port:          int(respData.Port),
+				TotalUpload:   0,
+				TotalDownload: 0,
+				LastUpload:    0,
+				LastDownload:  0,
+				UploadSpeed:   "0.00 B/s",
+				DownloadSpeed: "0.00 B/s",
+				Ping:          0,
+			}
+			remark, err := ua.configManager.GetDeviceServiceRemark(respData.DeviceId, ua.serviceId)
+			if err == nil {
+				newPlayer.Remark = remark
+			}
+			ua.players = append(ua.players, newPlayer)
+			fyne.Do(func() {
+				ua.refreshPlayerTable()
+			})
+		})
+		ua.tcpClient.AddHandler(packer.ID_RemoveDevicePackageID, func(m *easytcp.Message) {
+			uploadBytesSize := new(int64)
+			downloadBytesSize := new(int64)
+			*uploadBytesSize = 0
+			data := m.Data()
+			*downloadBytesSize = int64(len(data) + 8)
+			defer ua.UpdatePlayerTrafficByDeviceId("A", uploadBytesSize, downloadBytesSize)
+			var respData packer.RemoveDevicePackage
+			if err := ua.tcpClient.Codec.Decode(data, &respData); err != nil {
+				fyne.Do(func() {
+					ua.appendLog(fmt.Sprintf("错误：解析服务ID包失败: %v", err))
+				})
+				return
+			}
+
+			ua.playersMutex.Lock()
+			defer ua.playersMutex.Unlock()
+			for index, player := range ua.players {
+				if player.DeviceID == respData.DeviceId {
+					ua.players = append(ua.players[:index], ua.players[index+1:]...)
+				}
+			}
 		})
 		err := ua.tcpClient.Connect(targetHost)
 		if err != nil {
@@ -1513,7 +1528,86 @@ func (ua *UDPRelayApp) allocatePortAndStartRelay(deviceId string) (int, error) {
 	return 0, errors.New("无法找到可用端口")
 }
 
-// appendLog 添加日志到界面
+// 根据指定端口在TCP客户端侧启动UDP中继
+func (ua *UDPRelayApp) startUDPRelayOnClient(port int) error {
+	// 检查是否已存在该端口的UDP中继
+	if _, exists := ua.udpRelay[port]; exists {
+		return nil // 已存在，无需重复启动
+	}
+
+	udpConfig := udp.DefaultConfig()
+	udpConfig.Port = port
+
+	// 创建UDP中继服务
+	relay := udp.NewUDPService(udpConfig)
+
+	// 设置数据回调函数
+	relay.SetDataCallback(func(data []byte, addr *net.UDPAddr) {
+		uploadBytesSize := new(int64)
+		downloadBytesSize := new(int64)
+		*uploadBytesSize = 0
+		*downloadBytesSize = 0
+		defer ua.UpdatePlayerTrafficByDeviceId("A", uploadBytesSize, downloadBytesSize)
+
+		ua.playersMutex.Lock()
+		defer ua.playersMutex.Unlock()
+
+		// 找到对应端口的玩家并转发数据
+		for index, player := range ua.players {
+			if index == 0 {
+				if player.Port != addr.Port {
+					player.Port = addr.Port
+					req := &packer.BindPortPackage{
+						Port: int32(player.Port),
+					}
+					sendBytesSize, err := ua.tcpClient.Send(packer.ID_BindPortPackageID, req)
+					if err != nil {
+						fyne.Do(func() {
+							ua.appendLog(fmt.Sprintf("错误：发送绑定端口失败: %v", err))
+						})
+						return
+					}
+					*uploadBytesSize = *uploadBytesSize + int64(sendBytesSize)
+				}
+			} else if player.Port == udpConfig.Port {
+				// 创建转发包
+				req := &packer.ForwardPackage{
+					Port:  int32(udpConfig.Port),
+					Bytes: data,
+				}
+				sendBytesSize, err := ua.tcpClient.Send(packer.ID_ForwardPackageID, req)
+				if err != nil {
+					fyne.Do(func() {
+						ua.appendLog(fmt.Sprintf("转发数据给端口 %d 失败: %v", udpConfig.Port, err))
+					})
+					return
+				}
+
+				// 更新流量统计
+				player.TotalUpload += int64(sendBytesSize)
+				ua.players[0].TotalUpload += int64(sendBytesSize)
+				break
+			}
+		}
+	})
+
+	// 启动UDP中继
+	err := relay.Start()
+	if err != nil {
+		return err
+	}
+
+	// 保存到管理映射
+	ua.udpRelay[port] = relay
+
+	fyne.Do(func() {
+		ua.appendLog(fmt.Sprintf("信息：在端口 %d 启动UDP中继", port))
+	})
+
+	return nil
+}
+
+// 添加日志到界面
 func (ua *UDPRelayApp) appendLog(message string) {
 	currentText := ua.logText.Text
 	if currentText != "" {

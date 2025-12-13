@@ -24,14 +24,16 @@ const (
 type ID int32
 
 const (
-	ID_AllUserInfoPackageID      ID = 0
-	ID_AuthenticationIdPackageID ID = 1
-	ID_BindPortPackageID         ID = 2
-	ID_ConfirmRegisterPackageID  ID = 3
-	ID_DeviceIdPackageID         ID = 4
-	ID_ForwardPackageID          ID = 5
-	ID_ServiceIdPackageID        ID = 6
-	ID_SwitchServiceIdPackageID  ID = 7
+	ID_AllUserInfoPackageID       ID = 0
+	ID_AuthenticationIdPackageID  ID = 1
+	ID_BindPortPackageID          ID = 2
+	ID_ConfirmRegisterPackageID   ID = 3
+	ID_DeviceIdPackageID          ID = 4
+	ID_ForwardPackageID           ID = 5
+	ID_ServiceIdPackageID         ID = 6
+	ID_SwitchServiceIdPackageID   ID = 7
+	ID_AddOrUpdateDevicePackageID ID = 8
+	ID_RemoveDevicePackageID      ID = 9
 )
 
 // Enum value maps for ID.
@@ -45,16 +47,20 @@ var (
 		5: "ForwardPackageID",
 		6: "ServiceIdPackageID",
 		7: "SwitchServiceIdPackageID",
+		8: "AddOrUpdateDevicePackageID",
+		9: "RemoveDevicePackageID",
 	}
 	ID_value = map[string]int32{
-		"AllUserInfoPackageID":      0,
-		"AuthenticationIdPackageID": 1,
-		"BindPortPackageID":         2,
-		"ConfirmRegisterPackageID":  3,
-		"DeviceIdPackageID":         4,
-		"ForwardPackageID":          5,
-		"ServiceIdPackageID":        6,
-		"SwitchServiceIdPackageID":  7,
+		"AllUserInfoPackageID":       0,
+		"AuthenticationIdPackageID":  1,
+		"BindPortPackageID":          2,
+		"ConfirmRegisterPackageID":   3,
+		"DeviceIdPackageID":          4,
+		"ForwardPackageID":           5,
+		"ServiceIdPackageID":         6,
+		"SwitchServiceIdPackageID":   7,
+		"AddOrUpdateDevicePackageID": 8,
+		"RemoveDevicePackageID":      9,
 	}
 )
 
@@ -88,6 +94,7 @@ func (ID) EnumDescriptor() ([]byte, []int) {
 type AllUserInfoPackage struct {
 	state         protoimpl.MessageState         `protogen:"open.v1"`
 	UserDataList  []*AllUserInfoPackage_UserData `protobuf:"bytes,1,rep,name=user_data_list,json=userDataList,proto3" json:"user_data_list,omitempty"`
+	ReservedPorts []int32                        `protobuf:"varint,2,rep,packed,name=reserved_ports,json=reservedPorts,proto3" json:"reserved_ports,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -125,6 +132,13 @@ func (*AllUserInfoPackage) Descriptor() ([]byte, []int) {
 func (x *AllUserInfoPackage) GetUserDataList() []*AllUserInfoPackage_UserData {
 	if x != nil {
 		return x.UserDataList
+	}
+	return nil
+}
+
+func (x *AllUserInfoPackage) GetReservedPorts() []int32 {
+	if x != nil {
+		return x.ReservedPorts
 	}
 	return nil
 }
@@ -485,6 +499,102 @@ func (x *SwitchServiceIdPackage) GetIndex() int32 {
 	return 0
 }
 
+type AddOrUpdateDevicePackage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId      string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	Port          int32                  `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddOrUpdateDevicePackage) Reset() {
+	*x = AddOrUpdateDevicePackage{}
+	mi := &file_message_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddOrUpdateDevicePackage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddOrUpdateDevicePackage) ProtoMessage() {}
+
+func (x *AddOrUpdateDevicePackage) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddOrUpdateDevicePackage.ProtoReflect.Descriptor instead.
+func (*AddOrUpdateDevicePackage) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *AddOrUpdateDevicePackage) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *AddOrUpdateDevicePackage) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+type RemoveDevicePackage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId      string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveDevicePackage) Reset() {
+	*x = RemoveDevicePackage{}
+	mi := &file_message_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveDevicePackage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveDevicePackage) ProtoMessage() {}
+
+func (x *RemoveDevicePackage) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveDevicePackage.ProtoReflect.Descriptor instead.
+func (*RemoveDevicePackage) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RemoveDevicePackage) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
 type AllUserInfoPackage_UserData struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DeviceId      string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
@@ -495,7 +605,7 @@ type AllUserInfoPackage_UserData struct {
 
 func (x *AllUserInfoPackage_UserData) Reset() {
 	*x = AllUserInfoPackage_UserData{}
-	mi := &file_message_proto_msgTypes[8]
+	mi := &file_message_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -507,7 +617,7 @@ func (x *AllUserInfoPackage_UserData) String() string {
 func (*AllUserInfoPackage_UserData) ProtoMessage() {}
 
 func (x *AllUserInfoPackage_UserData) ProtoReflect() protoreflect.Message {
-	mi := &file_message_proto_msgTypes[8]
+	mi := &file_message_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -541,9 +651,10 @@ var File_message_proto protoreflect.FileDescriptor
 
 const file_message_proto_rawDesc = "" +
 	"\n" +
-	"\rmessage.proto\x12\x06packer\"\x9c\x01\n" +
+	"\rmessage.proto\x12\x06packer\"\xc3\x01\n" +
 	"\x12AllUserInfoPackage\x12I\n" +
-	"\x0euser_data_list\x18\x01 \x03(\v2#.packer.AllUserInfoPackage.UserDataR\fuserDataList\x1a;\n" +
+	"\x0euser_data_list\x18\x01 \x03(\v2#.packer.AllUserInfoPackage.UserDataR\fuserDataList\x12%\n" +
+	"\x0ereserved_ports\x18\x02 \x03(\x05R\rreservedPorts\x1a;\n" +
 	"\bUserData\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\"y\n" +
@@ -568,7 +679,12 @@ const file_message_proto_rawDesc = "" +
 	"\n" +
 	"public_key\x18\x03 \x01(\tR\tpublicKey\".\n" +
 	"\x16SwitchServiceIdPackage\x12\x14\n" +
-	"\x05index\x18\x01 \x01(\x05R\x05index*\xd5\x01\n" +
+	"\x05index\x18\x01 \x01(\x05R\x05index\"K\n" +
+	"\x18AddOrUpdateDevicePackage\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x12\n" +
+	"\x04port\x18\x02 \x01(\x05R\x04port\"2\n" +
+	"\x13RemoveDevicePackage\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId*\x90\x02\n" +
 	"\x02ID\x12\x18\n" +
 	"\x14AllUserInfoPackageID\x10\x00\x12\x1d\n" +
 	"\x19AuthenticationIdPackageID\x10\x01\x12\x15\n" +
@@ -577,7 +693,9 @@ const file_message_proto_rawDesc = "" +
 	"\x11DeviceIdPackageID\x10\x04\x12\x14\n" +
 	"\x10ForwardPackageID\x10\x05\x12\x16\n" +
 	"\x12ServiceIdPackageID\x10\x06\x12\x1c\n" +
-	"\x18SwitchServiceIdPackageID\x10\aB\tZ\a/packerb\x06proto3"
+	"\x18SwitchServiceIdPackageID\x10\a\x12\x1e\n" +
+	"\x1aAddOrUpdateDevicePackageID\x10\b\x12\x19\n" +
+	"\x15RemoveDevicePackageID\x10\tB\tZ\a/packerb\x06proto3"
 
 var (
 	file_message_proto_rawDescOnce sync.Once
@@ -592,7 +710,7 @@ func file_message_proto_rawDescGZIP() []byte {
 }
 
 var file_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_message_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_message_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_message_proto_goTypes = []any{
 	(ID)(0),                             // 0: packer.ID
 	(*AllUserInfoPackage)(nil),          // 1: packer.AllUserInfoPackage
@@ -603,15 +721,17 @@ var file_message_proto_goTypes = []any{
 	(*ForwardPackage)(nil),              // 6: packer.ForwardPackage
 	(*ServiceIdPackage)(nil),            // 7: packer.ServiceIdPackage
 	(*SwitchServiceIdPackage)(nil),      // 8: packer.SwitchServiceIdPackage
-	(*AllUserInfoPackage_UserData)(nil), // 9: packer.AllUserInfoPackage.UserData
+	(*AddOrUpdateDevicePackage)(nil),    // 9: packer.AddOrUpdateDevicePackage
+	(*RemoveDevicePackage)(nil),         // 10: packer.RemoveDevicePackage
+	(*AllUserInfoPackage_UserData)(nil), // 11: packer.AllUserInfoPackage.UserData
 }
 var file_message_proto_depIdxs = []int32{
-	9, // 0: packer.AllUserInfoPackage.user_data_list:type_name -> packer.AllUserInfoPackage.UserData
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	11, // 0: packer.AllUserInfoPackage.user_data_list:type_name -> packer.AllUserInfoPackage.UserData
+	1,  // [1:1] is the sub-list for method output_type
+	1,  // [1:1] is the sub-list for method input_type
+	1,  // [1:1] is the sub-list for extension type_name
+	1,  // [1:1] is the sub-list for extension extendee
+	0,  // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_message_proto_init() }
@@ -625,7 +745,7 @@ func file_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_message_proto_rawDesc), len(file_message_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
