@@ -1,13 +1,13 @@
 module github.com/1143910315/UDPRelayServer
 
-go 1.25.4
+go 1.25.5
 
 require (
 	fyne.io/fyne/v2 v2.7.1
 	github.com/DarthPestilane/easytcp v0.4.0
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-sqlite3 v1.14.32
-	google.golang.org/protobuf v1.36.10
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
