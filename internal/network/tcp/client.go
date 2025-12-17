@@ -6,21 +6,22 @@ import (
 	"sync"
 	"time"
 
-	"github.com/1143910315/UDPRelayServer/net/packer"
+	"github.com/1143910315/UDPRelayServer/internal/network/protocol"
+	"github.com/1143910315/UDPRelayServer/internal/proto"
 	"github.com/DarthPestilane/easytcp"
 )
 
 // TCP客户端组件
 type TCPClient struct {
 	conn              net.Conn
-	packer            *packer.LengthWithIdPacker
+	packer            *protocol.LengthWithIDPacker
 	Codec             *easytcp.ProtobufCodec
 	isConnected       bool
 	mu                sync.RWMutex
 	wg                sync.WaitGroup
 	stopChan          chan struct{}
 	messageChan       chan []byte
-	handlers          map[packer.ID]MessageHandler
+	handlers          map[proto.ID]MessageHandler
 	handlerMu         sync.RWMutex
 	OnLog             func(level, message string)
 	addr              string
@@ -36,11 +37,11 @@ type MessageHandler func(*easytcp.Message)
 // 创建新的TCP客户端实例
 func NewTCPClient() *TCPClient {
 	return &TCPClient{
-		packer:            &packer.LengthWithIdPacker{},
+		packer:            &protocol.LengthWithIDPacker{},
 		Codec:             &easytcp.ProtobufCodec{},
 		stopChan:          make(chan struct{}),
 		messageChan:       make(chan []byte, 100),
-		handlers:          make(map[packer.ID]MessageHandler),
+		handlers:          make(map[proto.ID]MessageHandler),
 		reconnectInterval: time.Second,
 		reconnectChan:     make(chan struct{}, 1),
 	}
@@ -184,7 +185,7 @@ func (tc *TCPClient) IsConnected() bool {
 }
 
 // 发送消息到服务器
-func (tc *TCPClient) Send(msgID packer.ID, v any) (int, error) {
+func (tc *TCPClient) Send(msgID proto.ID, v any) (int, error) {
 	tc.mu.RLock()
 	defer tc.mu.RUnlock()
 
@@ -211,14 +212,14 @@ func (tc *TCPClient) Send(msgID packer.ID, v any) (int, error) {
 }
 
 // 添加消息处理器
-func (tc *TCPClient) AddHandler(msgID packer.ID, handler MessageHandler) {
+func (tc *TCPClient) AddHandler(msgID proto.ID, handler MessageHandler) {
 	tc.handlerMu.Lock()
 	defer tc.handlerMu.Unlock()
 	tc.handlers[msgID] = handler
 }
 
 // 移除消息处理器
-func (tc *TCPClient) RemoveHandler(msgID packer.ID) {
+func (tc *TCPClient) RemoveHandler(msgID proto.ID) {
 	tc.handlerMu.Lock()
 	defer tc.handlerMu.Unlock()
 	delete(tc.handlers, msgID)
@@ -305,7 +306,7 @@ func (tc *TCPClient) writeLoop() {
 // 处理接收到的消息
 func (tc *TCPClient) handleMessage(message *easytcp.Message) {
 	tc.handlerMu.RLock()
-	handler, exists := tc.handlers[packer.ID(message.ID().(packer.ID))]
+	handler, exists := tc.handlers[proto.ID(message.ID().(proto.ID))]
 	tc.handlerMu.RUnlock()
 
 	if exists {

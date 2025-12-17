@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/1143910315/UDPRelayServer/net/packer"
+	"github.com/1143910315/UDPRelayServer/internal/network/protocol"
+	"github.com/1143910315/UDPRelayServer/internal/proto"
 	"github.com/DarthPestilane/easytcp"
 )
 
@@ -23,7 +24,7 @@ type TCPServer struct {
 // 创建新的TCP服务器实例
 func NewTCPServer() *TCPServer {
 	service := easytcp.NewServer(&easytcp.ServerOption{
-		Packer: &packer.LengthWithIdPacker{},
+		Packer: &protocol.LengthWithIDPacker{},
 		Codec:  &easytcp.ProtobufCodec{},
 	})
 	ts := &TCPServer{
@@ -77,7 +78,7 @@ func (ts *TCPServer) IsRunning() bool {
 }
 
 // 打包数据
-func (ts *TCPServer) PackerData(msgID packer.ID, v any) ([]byte, error) {
+func (ts *TCPServer) PackerData(msgID proto.ID, v any) ([]byte, error) {
 	data, err := ts.service.Codec.Encode(v)
 	if err != nil {
 		return nil, err
@@ -106,7 +107,7 @@ func (ts *TCPServer) SendRawToSession(sessionID string, data []byte) error {
 }
 
 // 向指定会话发送数据
-func (ts *TCPServer) SendToSession(sessionID string, msgID packer.ID, v any) (int, error) {
+func (ts *TCPServer) SendToSession(sessionID string, msgID proto.ID, v any) (int, error) {
 	packedMsg, err := ts.PackerData(msgID, v)
 	if err != nil {
 		return 0, err
@@ -118,7 +119,7 @@ func (ts *TCPServer) SendToSession(sessionID string, msgID packer.ID, v any) (in
 }
 
 // 广播消息到所有会话
-func (ts *TCPServer) Broadcast(msgID packer.ID, data []byte) []error {
+func (ts *TCPServer) Broadcast(msgID proto.ID, data []byte) []error {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 	packedMsg, err := ts.service.Packer.Pack(easytcp.NewMessage(msgID, data))
@@ -180,7 +181,7 @@ func (ts *TCPServer) onSessionClose(session easytcp.Session) {
 }
 
 // 添加自定义路由
-func (ts *TCPServer) AddRoute(msgID packer.ID, handler easytcp.HandlerFunc, middlewares ...easytcp.MiddlewareFunc) {
+func (ts *TCPServer) AddRoute(msgID proto.ID, handler easytcp.HandlerFunc, middlewares ...easytcp.MiddlewareFunc) {
 	if ts.service != nil {
 		ts.service.AddRoute(msgID, handler, middlewares...)
 	}

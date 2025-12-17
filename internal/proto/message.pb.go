@@ -4,7 +4,7 @@
 // 	protoc        v6.33.2
 // source: message.proto
 
-package packer
+package proto
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -25,13 +25,13 @@ type ID int32
 
 const (
 	ID_AllUserInfoPackageID       ID = 0
-	ID_AuthenticationIdPackageID  ID = 1
+	ID_AuthenticationIDPackageID  ID = 1
 	ID_BindPortPackageID          ID = 2
 	ID_ConfirmRegisterPackageID   ID = 3
-	ID_DeviceIdPackageID          ID = 4
+	ID_DeviceIDPackageID          ID = 4
 	ID_ForwardPackageID           ID = 5
-	ID_ServiceIdPackageID         ID = 6
-	ID_SwitchServiceIdPackageID   ID = 7
+	ID_ServiceIDPackageID         ID = 6
+	ID_SwitchServiceIDPackageID   ID = 7
 	ID_AddOrUpdateDevicePackageID ID = 8
 	ID_RemoveDevicePackageID      ID = 9
 )
@@ -40,25 +40,25 @@ const (
 var (
 	ID_name = map[int32]string{
 		0: "AllUserInfoPackageID",
-		1: "AuthenticationIdPackageID",
+		1: "AuthenticationIDPackageID",
 		2: "BindPortPackageID",
 		3: "ConfirmRegisterPackageID",
-		4: "DeviceIdPackageID",
+		4: "DeviceIDPackageID",
 		5: "ForwardPackageID",
-		6: "ServiceIdPackageID",
-		7: "SwitchServiceIdPackageID",
+		6: "ServiceIDPackageID",
+		7: "SwitchServiceIDPackageID",
 		8: "AddOrUpdateDevicePackageID",
 		9: "RemoveDevicePackageID",
 	}
 	ID_value = map[string]int32{
 		"AllUserInfoPackageID":       0,
-		"AuthenticationIdPackageID":  1,
+		"AuthenticationIDPackageID":  1,
 		"BindPortPackageID":          2,
 		"ConfirmRegisterPackageID":   3,
-		"DeviceIdPackageID":          4,
+		"DeviceIDPackageID":          4,
 		"ForwardPackageID":           5,
-		"ServiceIdPackageID":         6,
-		"SwitchServiceIdPackageID":   7,
+		"ServiceIDPackageID":         6,
+		"SwitchServiceIDPackageID":   7,
 		"AddOrUpdateDevicePackageID": 8,
 		"RemoveDevicePackageID":      9,
 	}
@@ -143,7 +143,7 @@ func (x *AllUserInfoPackage) GetReservedPorts() []int32 {
 	return nil
 }
 
-type AuthenticationIdPackage struct {
+type AuthenticationIDPackage struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Index            int32                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
 	DeviceId         string                 `protobuf:"bytes,2,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
@@ -152,20 +152,20 @@ type AuthenticationIdPackage struct {
 	sizeCache        protoimpl.SizeCache
 }
 
-func (x *AuthenticationIdPackage) Reset() {
-	*x = AuthenticationIdPackage{}
+func (x *AuthenticationIDPackage) Reset() {
+	*x = AuthenticationIDPackage{}
 	mi := &file_message_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AuthenticationIdPackage) String() string {
+func (x *AuthenticationIDPackage) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AuthenticationIdPackage) ProtoMessage() {}
+func (*AuthenticationIDPackage) ProtoMessage() {}
 
-func (x *AuthenticationIdPackage) ProtoReflect() protoreflect.Message {
+func (x *AuthenticationIDPackage) ProtoReflect() protoreflect.Message {
 	mi := &file_message_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -177,26 +177,26 @@ func (x *AuthenticationIdPackage) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AuthenticationIdPackage.ProtoReflect.Descriptor instead.
-func (*AuthenticationIdPackage) Descriptor() ([]byte, []int) {
+// Deprecated: Use AuthenticationIDPackage.ProtoReflect.Descriptor instead.
+func (*AuthenticationIDPackage) Descriptor() ([]byte, []int) {
 	return file_message_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *AuthenticationIdPackage) GetIndex() int32 {
+func (x *AuthenticationIDPackage) GetIndex() int32 {
 	if x != nil {
 		return x.Index
 	}
 	return 0
 }
 
-func (x *AuthenticationIdPackage) GetDeviceId() string {
+func (x *AuthenticationIDPackage) GetDeviceId() string {
 	if x != nil {
 		return x.DeviceId
 	}
 	return ""
 }
 
-func (x *AuthenticationIdPackage) GetAuthenticationId() string {
+func (x *AuthenticationIDPackage) GetAuthenticationId() string {
 	if x != nil {
 		return x.AuthenticationId
 	}
@@ -299,27 +299,27 @@ func (x *ConfirmRegisterPackage) GetAuthenticationId() string {
 	return ""
 }
 
-type DeviceIdPackage struct {
+type DeviceIDPackage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DeviceId      string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *DeviceIdPackage) Reset() {
-	*x = DeviceIdPackage{}
+func (x *DeviceIDPackage) Reset() {
+	*x = DeviceIDPackage{}
 	mi := &file_message_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DeviceIdPackage) String() string {
+func (x *DeviceIDPackage) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DeviceIdPackage) ProtoMessage() {}
+func (*DeviceIDPackage) ProtoMessage() {}
 
-func (x *DeviceIdPackage) ProtoReflect() protoreflect.Message {
+func (x *DeviceIDPackage) ProtoReflect() protoreflect.Message {
 	mi := &file_message_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -331,12 +331,12 @@ func (x *DeviceIdPackage) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeviceIdPackage.ProtoReflect.Descriptor instead.
-func (*DeviceIdPackage) Descriptor() ([]byte, []int) {
+// Deprecated: Use DeviceIDPackage.ProtoReflect.Descriptor instead.
+func (*DeviceIDPackage) Descriptor() ([]byte, []int) {
 	return file_message_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *DeviceIdPackage) GetDeviceId() string {
+func (x *DeviceIDPackage) GetDeviceId() string {
 	if x != nil {
 		return x.DeviceId
 	}
@@ -395,7 +395,7 @@ func (x *ForwardPackage) GetBytes() []byte {
 	return nil
 }
 
-type ServiceIdPackage struct {
+type ServiceIDPackage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Index         int32                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
 	ServiceId     string                 `protobuf:"bytes,2,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
@@ -404,20 +404,20 @@ type ServiceIdPackage struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ServiceIdPackage) Reset() {
-	*x = ServiceIdPackage{}
+func (x *ServiceIDPackage) Reset() {
+	*x = ServiceIDPackage{}
 	mi := &file_message_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ServiceIdPackage) String() string {
+func (x *ServiceIDPackage) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ServiceIdPackage) ProtoMessage() {}
+func (*ServiceIDPackage) ProtoMessage() {}
 
-func (x *ServiceIdPackage) ProtoReflect() protoreflect.Message {
+func (x *ServiceIDPackage) ProtoReflect() protoreflect.Message {
 	mi := &file_message_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -429,53 +429,53 @@ func (x *ServiceIdPackage) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ServiceIdPackage.ProtoReflect.Descriptor instead.
-func (*ServiceIdPackage) Descriptor() ([]byte, []int) {
+// Deprecated: Use ServiceIDPackage.ProtoReflect.Descriptor instead.
+func (*ServiceIDPackage) Descriptor() ([]byte, []int) {
 	return file_message_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *ServiceIdPackage) GetIndex() int32 {
+func (x *ServiceIDPackage) GetIndex() int32 {
 	if x != nil {
 		return x.Index
 	}
 	return 0
 }
 
-func (x *ServiceIdPackage) GetServiceId() string {
+func (x *ServiceIDPackage) GetServiceId() string {
 	if x != nil {
 		return x.ServiceId
 	}
 	return ""
 }
 
-func (x *ServiceIdPackage) GetPublicKey() string {
+func (x *ServiceIDPackage) GetPublicKey() string {
 	if x != nil {
 		return x.PublicKey
 	}
 	return ""
 }
 
-type SwitchServiceIdPackage struct {
+type SwitchServiceIDPackage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Index         int32                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SwitchServiceIdPackage) Reset() {
-	*x = SwitchServiceIdPackage{}
+func (x *SwitchServiceIDPackage) Reset() {
+	*x = SwitchServiceIDPackage{}
 	mi := &file_message_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SwitchServiceIdPackage) String() string {
+func (x *SwitchServiceIDPackage) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SwitchServiceIdPackage) ProtoMessage() {}
+func (*SwitchServiceIDPackage) ProtoMessage() {}
 
-func (x *SwitchServiceIdPackage) ProtoReflect() protoreflect.Message {
+func (x *SwitchServiceIDPackage) ProtoReflect() protoreflect.Message {
 	mi := &file_message_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -487,12 +487,12 @@ func (x *SwitchServiceIdPackage) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SwitchServiceIdPackage.ProtoReflect.Descriptor instead.
-func (*SwitchServiceIdPackage) Descriptor() ([]byte, []int) {
+// Deprecated: Use SwitchServiceIDPackage.ProtoReflect.Descriptor instead.
+func (*SwitchServiceIDPackage) Descriptor() ([]byte, []int) {
 	return file_message_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *SwitchServiceIdPackage) GetIndex() int32 {
+func (x *SwitchServiceIDPackage) GetIndex() int32 {
 	if x != nil {
 		return x.Index
 	}
@@ -651,14 +651,14 @@ var File_message_proto protoreflect.FileDescriptor
 
 const file_message_proto_rawDesc = "" +
 	"\n" +
-	"\rmessage.proto\x12\x06packer\"\xc3\x01\n" +
-	"\x12AllUserInfoPackage\x12I\n" +
-	"\x0euser_data_list\x18\x01 \x03(\v2#.packer.AllUserInfoPackage.UserDataR\fuserDataList\x12%\n" +
+	"\rmessage.proto\x12\x05proto\"\xc2\x01\n" +
+	"\x12AllUserInfoPackage\x12H\n" +
+	"\x0euser_data_list\x18\x01 \x03(\v2\".proto.AllUserInfoPackage.UserDataR\fuserDataList\x12%\n" +
 	"\x0ereserved_ports\x18\x02 \x03(\x05R\rreservedPorts\x1a;\n" +
 	"\bUserData\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\"y\n" +
-	"\x17AuthenticationIdPackage\x12\x14\n" +
+	"\x17AuthenticationIDPackage\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\x05R\x05index\x12\x1b\n" +
 	"\tdevice_id\x18\x02 \x01(\tR\bdeviceId\x12+\n" +
 	"\x11authentication_id\x18\x03 \x01(\tR\x10authenticationId\"%\n" +
@@ -667,18 +667,18 @@ const file_message_proto_rawDesc = "" +
 	"\x16ConfirmRegisterPackage\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12+\n" +
 	"\x11authentication_id\x18\x02 \x01(\tR\x10authenticationId\".\n" +
-	"\x0fDeviceIdPackage\x12\x1b\n" +
+	"\x0fDeviceIDPackage\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\":\n" +
 	"\x0eForwardPackage\x12\x12\n" +
 	"\x04port\x18\x01 \x01(\x05R\x04port\x12\x14\n" +
 	"\x05bytes\x18\x02 \x01(\fR\x05bytes\"f\n" +
-	"\x10ServiceIdPackage\x12\x14\n" +
+	"\x10ServiceIDPackage\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\x05R\x05index\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x02 \x01(\tR\tserviceId\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x03 \x01(\tR\tpublicKey\".\n" +
-	"\x16SwitchServiceIdPackage\x12\x14\n" +
+	"\x16SwitchServiceIDPackage\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\x05R\x05index\"K\n" +
 	"\x18AddOrUpdateDevicePackage\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x12\n" +
@@ -687,15 +687,15 @@ const file_message_proto_rawDesc = "" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId*\x90\x02\n" +
 	"\x02ID\x12\x18\n" +
 	"\x14AllUserInfoPackageID\x10\x00\x12\x1d\n" +
-	"\x19AuthenticationIdPackageID\x10\x01\x12\x15\n" +
+	"\x19AuthenticationIDPackageID\x10\x01\x12\x15\n" +
 	"\x11BindPortPackageID\x10\x02\x12\x1c\n" +
 	"\x18ConfirmRegisterPackageID\x10\x03\x12\x15\n" +
-	"\x11DeviceIdPackageID\x10\x04\x12\x14\n" +
+	"\x11DeviceIDPackageID\x10\x04\x12\x14\n" +
 	"\x10ForwardPackageID\x10\x05\x12\x16\n" +
-	"\x12ServiceIdPackageID\x10\x06\x12\x1c\n" +
-	"\x18SwitchServiceIdPackageID\x10\a\x12\x1e\n" +
+	"\x12ServiceIDPackageID\x10\x06\x12\x1c\n" +
+	"\x18SwitchServiceIDPackageID\x10\a\x12\x1e\n" +
 	"\x1aAddOrUpdateDevicePackageID\x10\b\x12\x19\n" +
-	"\x15RemoveDevicePackageID\x10\tB\tZ\a/packerb\x06proto3"
+	"\x15RemoveDevicePackageID\x10\tB\bZ\x06/protob\x06proto3"
 
 var (
 	file_message_proto_rawDescOnce sync.Once
@@ -712,21 +712,21 @@ func file_message_proto_rawDescGZIP() []byte {
 var file_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_message_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_message_proto_goTypes = []any{
-	(ID)(0),                             // 0: packer.ID
-	(*AllUserInfoPackage)(nil),          // 1: packer.AllUserInfoPackage
-	(*AuthenticationIdPackage)(nil),     // 2: packer.AuthenticationIdPackage
-	(*BindPortPackage)(nil),             // 3: packer.BindPortPackage
-	(*ConfirmRegisterPackage)(nil),      // 4: packer.ConfirmRegisterPackage
-	(*DeviceIdPackage)(nil),             // 5: packer.DeviceIdPackage
-	(*ForwardPackage)(nil),              // 6: packer.ForwardPackage
-	(*ServiceIdPackage)(nil),            // 7: packer.ServiceIdPackage
-	(*SwitchServiceIdPackage)(nil),      // 8: packer.SwitchServiceIdPackage
-	(*AddOrUpdateDevicePackage)(nil),    // 9: packer.AddOrUpdateDevicePackage
-	(*RemoveDevicePackage)(nil),         // 10: packer.RemoveDevicePackage
-	(*AllUserInfoPackage_UserData)(nil), // 11: packer.AllUserInfoPackage.UserData
+	(ID)(0),                             // 0: proto.ID
+	(*AllUserInfoPackage)(nil),          // 1: proto.AllUserInfoPackage
+	(*AuthenticationIDPackage)(nil),     // 2: proto.AuthenticationIDPackage
+	(*BindPortPackage)(nil),             // 3: proto.BindPortPackage
+	(*ConfirmRegisterPackage)(nil),      // 4: proto.ConfirmRegisterPackage
+	(*DeviceIDPackage)(nil),             // 5: proto.DeviceIDPackage
+	(*ForwardPackage)(nil),              // 6: proto.ForwardPackage
+	(*ServiceIDPackage)(nil),            // 7: proto.ServiceIDPackage
+	(*SwitchServiceIDPackage)(nil),      // 8: proto.SwitchServiceIDPackage
+	(*AddOrUpdateDevicePackage)(nil),    // 9: proto.AddOrUpdateDevicePackage
+	(*RemoveDevicePackage)(nil),         // 10: proto.RemoveDevicePackage
+	(*AllUserInfoPackage_UserData)(nil), // 11: proto.AllUserInfoPackage.UserData
 }
 var file_message_proto_depIdxs = []int32{
-	11, // 0: packer.AllUserInfoPackage.user_data_list:type_name -> packer.AllUserInfoPackage.UserData
+	11, // 0: proto.AllUserInfoPackage.user_data_list:type_name -> proto.AllUserInfoPackage.UserData
 	1,  // [1:1] is the sub-list for method output_type
 	1,  // [1:1] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name

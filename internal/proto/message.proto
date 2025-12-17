@@ -1,18 +1,18 @@
 syntax = 'proto3';
 
-package packer;
+package proto;
 
-option go_package = '/packer';
+option go_package = '/proto';
 
 enum ID {
   AllUserInfoPackageID = 0;
-  AuthenticationIdPackageID = 1;
+  AuthenticationIDPackageID = 1;
   BindPortPackageID = 2;
   ConfirmRegisterPackageID = 3;
-  DeviceIdPackageID = 4;
+  DeviceIDPackageID = 4;
   ForwardPackageID = 5;
-  ServiceIdPackageID = 6;
-  SwitchServiceIdPackageID = 7;
+  ServiceIDPackageID = 6;
+  SwitchServiceIDPackageID = 7;
   AddOrUpdateDevicePackageID = 8;
   RemoveDevicePackageID = 9;
 }
@@ -27,7 +27,7 @@ message AllUserInfoPackage {
   repeated int32 reserved_ports = 2;
 }
 
-message AuthenticationIdPackage {
+message AuthenticationIDPackage {
   int32 index = 1;
   string device_id = 2;
   string authentication_id = 3;
@@ -42,7 +42,7 @@ message ConfirmRegisterPackage {
   string authentication_id = 2;
 }
 
-message DeviceIdPackage {
+message DeviceIDPackage {
   string device_id = 1;
 }
 
@@ -51,13 +51,13 @@ message ForwardPackage {
   bytes bytes = 2;
 }
 
-message ServiceIdPackage {
+message ServiceIDPackage {
   int32 index = 1;
   string service_id = 2;
   string public_key = 3;
 }
 
-message SwitchServiceIdPackage {
+message SwitchServiceIDPackage {
   int32 index = 1;
 }
 
