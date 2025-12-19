@@ -961,7 +961,7 @@ func (ua *UDPRelayApp) setEventCallbacks() {
 	ua.mainPage.ClearBtn.OnTapped = func() {
 		ua.mainPage.LogText.SetText("")
 	}
-	ua.mainPage.ClearBtn1.OnTapped = ua.mainPage.ClearBtn1.OnTapped
+	ua.mainPage.ClearBtn1.OnTapped = ua.mainPage.ClearBtn.OnTapped
 	ua.mainPage.PlayerTable.CreateCell = func() fyne.CanvasObject {
 		return widget.NewLabel("模板文本")
 	}
