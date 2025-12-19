@@ -50,15 +50,14 @@ type UDPRelayApp struct {
 }
 
 // NewUDPRelayApp 创建新的GUI应用程序
-func NewUDPRelayApp() *UDPRelayApp {
+func NewUDPRelayApp() (*UDPRelayApp, error) {
 	myApp := app.New()
 	window := myApp.NewWindow("UDP 中继服务器")
 
 	// 初始化配置管理器
 	configManager, err := config.NewConfigManager()
 	if err != nil {
-		// 如果配置管理器初始化失败，使用默认值继续运行
-		fmt.Printf("配置管理器初始化失败: %v\n", err)
+		return nil, err
 	}
 
 	// 设置自定义主题
@@ -72,36 +71,42 @@ func NewUDPRelayApp() *UDPRelayApp {
 		advancedStringIncrementer: utils.NewAdvancedStringIncrementer(),
 		reservePort:               make(map[string]int),
 		udpRelay:                  make(map[int]*udp.UDPService),
-	}
+	}, nil
 }
 
 // createUI 创建用户界面
 func (ua *UDPRelayApp) createUI() {
+	// 创建日志显示框
+	ua.logText = widget.NewMultiLineEntry()
 	// 创建输入字段
 	listenPortEntry := widget.NewEntry()
 	targetHostEntry := widget.NewEntry()
 	targetPortEntry := widget.NewEntry()
 
-	// 从数据库加载配置，如果失败则使用默认值
-	if ua.configManager != nil {
-		listenPortEntry.SetText(ua.configManager.GetConfig("listen_port", "8080"))
-		targetHostEntry.SetText(ua.configManager.GetConfig("target_host", "127.0.0.1:8080"))
-		targetPortEntry.SetText(ua.configManager.GetConfig("target_port", "8081"))
+	options, err := ua.configManager.GetAllConnectionAddresses()
+	if err != nil {
+		ua.appendLog(fmt.Sprintf("获取连接地址失败: %v", err))
+	}
+	if options == nil {
+		options = []string{
+			"127.0.0.1:8080",
+		}
+	}
+	historyAddressSelect := widget.NewSelect(options, func(value string) {
+		targetHostEntry.Text = value
+	})
 
-		// 设置配置保存回调
-		listenPortEntry.OnChanged = func(text string) {
-			ua.configManager.SetConfigDebounced("listen_port", text)
-		}
-		targetHostEntry.OnChanged = func(text string) {
-			ua.configManager.SetConfigDebounced("target_host", text)
-		}
-		targetPortEntry.OnChanged = func(text string) {
-			ua.configManager.SetConfigDebounced("target_port", text)
-		}
-	} else {
-		listenPortEntry.SetText("8080")
-		targetHostEntry.SetText("127.0.0.1:8080")
-		targetPortEntry.SetText("8081")
+	// 从数据库加载配置，如果失败则使用默认值
+	listenPortEntry.SetText(ua.configManager.GetConfig("listen_port", "8080"))
+	targetPortEntry.SetText(ua.configManager.GetConfig("target_port", "8081"))
+	historyAddressSelect.SetSelected(ua.configManager.GetLastConnectionAddress("127.0.0.1:8080"))
+
+	// 设置配置保存回调
+	listenPortEntry.OnChanged = func(text string) {
+		ua.configManager.SetConfigDebounced("listen_port", text)
+	}
+	targetPortEntry.OnChanged = func(text string) {
+		ua.configManager.SetConfigDebounced("target_port", text)
 	}
 
 	listenPortEntry.SetPlaceHolder("监听端口")
@@ -600,6 +605,12 @@ func (ua *UDPRelayApp) createUI() {
 			}
 			ua.playerManager.PlayersMutex.Unlock()
 			ua.appendLog(fmt.Sprintf("信息：连接到服务器 %s", targetHost))
+			err := ua.configManager.SetConnectionAddressAsLastUsed(targetHost)
+			if err != nil {
+				fyne.Do(func() {
+					ua.appendLog(fmt.Sprintf("错误：保存连接地址失败: %v", err))
+				})
+			}
 			ua.connectBtn.Disable()
 			ua.disconnectBtn.Enable()
 			targetHostEntry.Disable()
@@ -771,11 +782,9 @@ func (ua *UDPRelayApp) createUI() {
 					player.Port = int(serverPlayer.Port)
 
 					// 尝试从数据库加载备注
-					if ua.configManager != nil {
-						remark, err := ua.configManager.GetDeviceServiceRemark(deviceID, ua.serviceID)
-						if err == nil {
-							player.Remark = remark
-						}
+					remark, err := ua.configManager.GetDeviceServiceRemark(deviceID, ua.serviceID)
+					if err == nil {
+						player.Remark = remark
 					}
 					if _, ok := ua.udpRelay[player.Port]; !ok {
 						udpConfig := udp.DefaultConfig()
@@ -985,7 +994,6 @@ func (ua *UDPRelayApp) createUI() {
 	playerTableScroll.SetMinSize(fyne.NewSize(550, 150))
 
 	// 日志区域
-	ua.logText = widget.NewMultiLineEntry()
 	ua.logText.Disable()
 
 	// 主机模式的内容
@@ -998,6 +1006,7 @@ func (ua *UDPRelayApp) createUI() {
 	// 客机模式的内容
 	clientContent := container.NewVBox(
 		container.NewBorder(nil, nil, widget.NewLabel("目标主机"), nil, targetHostEntry),
+		container.NewBorder(nil, nil, widget.NewLabel("历史主机"), nil, historyAddressSelect),
 		layout.NewSpacer(),
 		container.NewHBox(ua.connectBtn, ua.disconnectBtn),
 	)
@@ -1010,19 +1019,15 @@ func (ua *UDPRelayApp) createUI() {
 
 	// 设置Tab切换回调
 	tabs.OnSelected = func(ti *container.TabItem) {
-		if ua.configManager != nil {
-			// 保存当前选中的tab索引
-			tabIndex := strconv.Itoa(tabs.SelectedIndex())
-			ua.configManager.SetConfigDebounced("last_tab", tabIndex)
-		}
+		// 保存当前选中的tab索引
+		tabIndex := strconv.Itoa(tabs.SelectedIndex())
+		ua.configManager.SetConfigDebounced("last_tab", tabIndex)
 	}
 
 	// 恢复最后选择的tab
-	if ua.configManager != nil {
-		lastTab := ua.configManager.GetConfig("last_tab", "0")
-		if tabIndex, err := strconv.Atoi(lastTab); err == nil && tabIndex >= 0 && tabIndex < len(tabs.Items) {
-			tabs.SelectIndex(tabIndex)
-		}
+	lastTab := ua.configManager.GetConfig("last_tab", "0")
+	if tabIndex, err := strconv.Atoi(lastTab); err == nil && tabIndex >= 0 && tabIndex < len(tabs.Items) {
+		tabs.SelectIndex(tabIndex)
 	}
 
 	buttonRow := container.NewHBox(
@@ -1400,10 +1405,6 @@ func (ua *UDPRelayApp) refreshPlayerTableItem(row int, col int) {
 
 // 保存窗口大小
 func (ua *UDPRelayApp) saveWindowState() {
-	if ua.configManager == nil {
-		return
-	}
-
 	// 保存窗口大小
 	size := ua.window.Content().Size()
 	ua.configManager.SetConfigDebounced("window_width", strconv.Itoa(int(size.Width)))
@@ -1412,11 +1413,6 @@ func (ua *UDPRelayApp) saveWindowState() {
 
 // 恢复窗口大小
 func (ua *UDPRelayApp) restoreWindowState() {
-	if ua.configManager == nil {
-		ua.window.Resize(fyne.NewSize(1024, 768))
-		return
-	}
-
 	// 恢复窗口大小
 	width, _ := strconv.Atoi(ua.configManager.GetConfig("window_width", "1024"))
 	height, _ := strconv.Atoi(ua.configManager.GetConfig("window_height", "768"))
@@ -1425,13 +1421,48 @@ func (ua *UDPRelayApp) restoreWindowState() {
 
 // 在应用程序退出时关闭配置管理器
 func (ua *UDPRelayApp) Cleanup() {
-	if ua.configManager != nil {
-		ua.configManager.Close()
-	}
+	ua.configManager.Close()
 }
 
 func main() {
-	relayApp := NewUDPRelayApp()
+	relayApp, err := NewUDPRelayApp()
+	if err != nil {
+		myApp := app.New()
+		window := myApp.NewWindow("UDP 中继服务器")
+		window.Resize(fyne.Size{Width: 600, Height: 300})
+		window.CenterOnScreen()
+
+		// 创建错误标签
+		errorLabel := widget.NewLabel(err.Error())
+		errorLabel.Wrapping = fyne.TextWrapWord // 允许文本换行
+
+		// 创建确定按钮
+		confirmBtn := widget.NewButton("确定", func() {
+			window.Close()
+		})
+
+		// 创建主要内容区域
+		mainContent := container.NewVBox(
+			widget.NewLabelWithStyle("错误", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			errorLabel,
+		)
+
+		// 使用 Border 布局，将按钮放在底部
+		content := container.NewBorder(
+			nil,         // 上
+			confirmBtn,  // 下（按钮在底部）
+			nil,         // 左
+			nil,         // 右
+			mainContent, // 中间内容
+		)
+
+		// 添加外边距
+		paddedContent := container.NewPadded(content)
+
+		window.SetContent(paddedContent)
+		window.ShowAndRun()
+		return
+	}
 	relayApp.StartSpeedTimer()
 	relayApp.Run()
 	relayApp.configManager.WaitForDebounced()

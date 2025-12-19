@@ -62,6 +62,13 @@ func NewConfigManager() (*ConfigManager, error) {
 		return nil, err
 	}
 
+	// 创建连接地址表
+	createAddressTableSQL := `CREATE TABLE IF NOT EXISTS connection_addresses (address TEXT PRIMARY KEY,last_used INTEGER DEFAULT 0,created_time INTEGER DEFAULT 0)`
+	_, err = db.Exec(createAddressTableSQL)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ConfigManager{
 		db:             db,
 		debounceTimers: make(map[string]*time.Timer),
@@ -230,6 +237,80 @@ func (cm *ConfigManager) GetDeviceServiceRemark(deviceID, serviceID string) (str
 		return "", err
 	}
 	return remark, nil
+}
+
+// 设置连接地址为最后使用的，如果不存在则添加
+func (cm *ConfigManager) SetConnectionAddressAsLastUsed(address string) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	// 检查地址是否存在
+	var count int
+	err := cm.db.QueryRow("SELECT COUNT(*) FROM connection_addresses WHERE address = ?", address).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	currentTime := time.Now().Unix()
+
+	if count == 0 {
+		// 地址不存在，插入新记录
+		_, err = cm.db.Exec(
+			"INSERT INTO connection_addresses (address, last_used) VALUES (?, ?)",
+			address, currentTime,
+		)
+	} else {
+		// 地址存在，更新最后使用时间
+		_, err = cm.db.Exec(
+			"UPDATE connection_addresses SET last_used = ? WHERE address = ?",
+			currentTime, address,
+		)
+	}
+
+	return err
+}
+
+// 获取全部地址
+func (cm *ConfigManager) GetAllConnectionAddresses() ([]string, error) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+
+	rows, err := cm.db.Query("SELECT address FROM connection_addresses ORDER BY last_used DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var addresses []string
+	for rows.Next() {
+		var address string
+		if err := rows.Scan(&address); err != nil {
+			return nil, err
+		}
+		addresses = append(addresses, address)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return addresses, nil
+}
+
+// 获取最后连接的地址
+func (cm *ConfigManager) GetLastConnectionAddress(defaultAddress string) string {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+
+	var address string
+	err := cm.db.QueryRow(
+		"SELECT address FROM connection_addresses ORDER BY last_used DESC LIMIT 1",
+	).Scan(&address)
+
+	if err != nil {
+		return defaultAddress
+	}
+	return address
 }
 
 // 关闭数据库连接
