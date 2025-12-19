@@ -10,6 +10,7 @@ import (
 // 主页面
 type MainPage struct {
 	Window               fyne.Window
+	Content              *fyne.Container
 	Tabs                 *container.AppTabs
 	ListenPortEntry      *widget.Entry
 	TargetPortEntry      *widget.Entry
@@ -86,14 +87,13 @@ func NewMainPage(app fyne.App) *MainPage {
 		widget.NewLabel("运行日志"),
 	)
 
-	content := container.NewBorder(topContent, nil, nil, nil, logScroll)
-
-	mainPage.Window.SetContent(content)
+	mainPage.Content = container.NewBorder(topContent, nil, nil, nil, logScroll)
 	return mainPage
 }
 
 // 显示窗口
-func (mp *MainPage) Show() {
+func (mp *MainPage) ShowAndRun() {
+	mp.Window.SetContent(mp.Content)
 	mp.Window.ShowAndRun()
 }
 

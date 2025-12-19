@@ -84,12 +84,6 @@ func (ua *UDPRelayApp) initData() {
 	ua.mainPage.TargetHostEntry.SetText(lastConnectionAddress)
 	ua.mainPage.HistoryAddressSelect.SetSelected(lastConnectionAddress)
 
-	ua.mainPage.PlayerTable.SetColumnWidth(0, 150) // 玩家列宽度
-	ua.mainPage.PlayerTable.SetColumnWidth(1, 80)  // 端口列宽度
-	ua.mainPage.PlayerTable.SetColumnWidth(2, 100) // 上传速度列宽度
-	ua.mainPage.PlayerTable.SetColumnWidth(3, 100) // 下载速度列宽度
-	ua.mainPage.PlayerTable.SetColumnWidth(4, 80)  // Ping列宽度
-
 	lastTab := ua.configManager.GetConfig("last_tab", "0")
 	if tabIndex, err := strconv.Atoi(lastTab); err == nil && tabIndex >= 0 && tabIndex < len(ua.mainPage.Tabs.Items) {
 		ua.mainPage.Tabs.SelectIndex(tabIndex)
@@ -1186,6 +1180,12 @@ func (ua *UDPRelayApp) Run() {
 	ua.initData()
 	ua.setEventCallbacks()
 
+	ua.mainPage.PlayerTable.SetColumnWidth(0, 150) // 玩家列宽度
+	ua.mainPage.PlayerTable.SetColumnWidth(1, 80)  // 端口列宽度
+	ua.mainPage.PlayerTable.SetColumnWidth(2, 100) // 上传速度列宽度
+	ua.mainPage.PlayerTable.SetColumnWidth(3, 100) // 下载速度列宽度
+	ua.mainPage.PlayerTable.SetColumnWidth(4, 80)  // Ping列宽度
+	
 	// 恢复窗口状态
 	ua.restoreWindowState()
 
@@ -1197,7 +1197,7 @@ func (ua *UDPRelayApp) Run() {
 		ua.mainPage.Window.Close()
 	})
 
-	ua.mainPage.Window.ShowAndRun()
+	ua.mainPage.ShowAndRun()
 }
 
 // 启动速度计算定时器
