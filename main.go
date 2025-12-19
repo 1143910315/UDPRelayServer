@@ -12,12 +12,12 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/1143910315/UDPRelayServer/internal/config"
 	"github.com/1143910315/UDPRelayServer/internal/game"
 	"github.com/1143910315/UDPRelayServer/internal/gui"
+	"github.com/1143910315/UDPRelayServer/internal/gui/ui"
 	"github.com/1143910315/UDPRelayServer/internal/network/tcp"
 	"github.com/1143910315/UDPRelayServer/internal/network/udp"
 	"github.com/1143910315/UDPRelayServer/internal/proto"
@@ -30,16 +30,10 @@ import (
 // GUI应用程序结构
 type UDPRelayApp struct {
 	app                       fyne.App
-	window                    fyne.Window
+	mainPage                  *ui.MainPage
 	tcpService                *tcp.TCPServer
 	tcpClient                 *tcp.TCPClient
-	logText                   *widget.Entry
-	startBtn                  *widget.Button
-	stopBtn                   *widget.Button
-	connectBtn                *widget.Button
-	disconnectBtn             *widget.Button
 	configManager             *config.ConfigManager
-	playerTable               *widget.Table
 	playerManager             *game.PlayerManager
 	advancedStringIncrementer *utils.AdvancedStringIncrementer
 	serviceID                 string
@@ -52,7 +46,8 @@ type UDPRelayApp struct {
 // NewUDPRelayApp 创建新的GUI应用程序
 func NewUDPRelayApp() (*UDPRelayApp, error) {
 	myApp := app.New()
-	window := myApp.NewWindow("UDP 中继服务器")
+	// 设置自定义主题
+	myApp.Settings().SetTheme(&gui.CustomTheme{})
 
 	// 初始化配置管理器
 	configManager, err := config.NewConfigManager()
@@ -60,12 +55,9 @@ func NewUDPRelayApp() (*UDPRelayApp, error) {
 		return nil, err
 	}
 
-	// 设置自定义主题
-	myApp.Settings().SetTheme(&gui.CustomTheme{})
-
 	return &UDPRelayApp{
 		app:                       myApp,
-		window:                    window,
+		mainPage:                  ui.NewMainPage(myApp),
 		configManager:             configManager,
 		playerManager:             game.NewPlayerManager(configManager),
 		advancedStringIncrementer: utils.NewAdvancedStringIncrementer(),
@@ -74,15 +66,7 @@ func NewUDPRelayApp() (*UDPRelayApp, error) {
 	}, nil
 }
 
-// createUI 创建用户界面
-func (ua *UDPRelayApp) createUI() {
-	// 创建日志显示框
-	ua.logText = widget.NewMultiLineEntry()
-	// 创建输入字段
-	listenPortEntry := widget.NewEntry()
-	targetHostEntry := widget.NewEntry()
-	targetPortEntry := widget.NewEntry()
-
+func (ua *UDPRelayApp) initData() {
 	options, err := ua.configManager.GetAllConnectionAddresses()
 	if err != nil {
 		ua.appendLog(fmt.Sprintf("获取连接地址失败: %v", err))
@@ -92,36 +76,45 @@ func (ua *UDPRelayApp) createUI() {
 			"127.0.0.1:8080",
 		}
 	}
-	historyAddressSelect := widget.NewSelect(options, func(value string) {
-		targetHostEntry.Text = value
-	})
+	ua.mainPage.HistoryAddressSelect.Options = options
 
-	// 从数据库加载配置，如果失败则使用默认值
-	listenPortEntry.SetText(ua.configManager.GetConfig("listen_port", "8080"))
-	targetPortEntry.SetText(ua.configManager.GetConfig("target_port", "8081"))
-	historyAddressSelect.SetSelected(ua.configManager.GetLastConnectionAddress("127.0.0.1:8080"))
+	ua.mainPage.ListenPortEntry.SetText(ua.configManager.GetConfig("listen_port", "8080"))
+	ua.mainPage.TargetPortEntry.SetText(ua.configManager.GetConfig("target_port", "8081"))
+	lastConnectionAddress := ua.configManager.GetLastConnectionAddress("127.0.0.1:8080")
+	ua.mainPage.TargetHostEntry.SetText(lastConnectionAddress)
+	ua.mainPage.HistoryAddressSelect.SetSelected(lastConnectionAddress)
 
-	// 设置配置保存回调
-	listenPortEntry.OnChanged = func(text string) {
-		ua.configManager.SetConfigDebounced("listen_port", text)
+	ua.mainPage.PlayerTable.SetColumnWidth(0, 150) // 玩家列宽度
+	ua.mainPage.PlayerTable.SetColumnWidth(1, 80)  // 端口列宽度
+	ua.mainPage.PlayerTable.SetColumnWidth(2, 100) // 上传速度列宽度
+	ua.mainPage.PlayerTable.SetColumnWidth(3, 100) // 下载速度列宽度
+	ua.mainPage.PlayerTable.SetColumnWidth(4, 80)  // Ping列宽度
+
+	lastTab := ua.configManager.GetConfig("last_tab", "0")
+	if tabIndex, err := strconv.Atoi(lastTab); err == nil && tabIndex >= 0 && tabIndex < len(ua.mainPage.Tabs.Items) {
+		ua.mainPage.Tabs.SelectIndex(tabIndex)
 	}
-	targetPortEntry.OnChanged = func(text string) {
-		ua.configManager.SetConfigDebounced("target_port", text)
+}
+
+// 设置事件回调
+func (ua *UDPRelayApp) setEventCallbacks() {
+	ua.mainPage.ListenPortEntry.OnChanged = func(s string) {
+		ua.configManager.SetConfigDebounced("listen_port", s)
 	}
-
-	listenPortEntry.SetPlaceHolder("监听端口")
-	targetHostEntry.SetPlaceHolder("目标主机")
-	targetPortEntry.SetPlaceHolder("游戏端口")
-
-	// 主机模式按钮
-	ua.startBtn = widget.NewButton("启动服务器", func() {
-		listenPortText := strings.TrimSpace(listenPortEntry.Text)
+	ua.mainPage.TargetPortEntry.OnChanged = func(s string) {
+		ua.configManager.SetConfigDebounced("target_port", s)
+	}
+	ua.mainPage.HistoryAddressSelect.OnChanged = func(s string) {
+		ua.mainPage.TargetHostEntry.SetText(s)
+	}
+	ua.mainPage.StartBtn.OnTapped = func() {
+		listenPortText := strings.TrimSpace(ua.mainPage.ListenPortEntry.Text)
 		listenPort, err := strconv.Atoi(listenPortText)
 		if err != nil || listenPort < 1 || listenPort > 65535 {
 			ua.appendLog("错误: 监听端口必须是 1-65535 之间的数字")
 			return
 		}
-		targetPort, err := strconv.Atoi(strings.TrimSpace(targetPortEntry.Text))
+		targetPort, err := strconv.Atoi(strings.TrimSpace(ua.mainPage.TargetPortEntry.Text))
 		if err != nil || targetPort < 1 || targetPort > 65535 {
 			ua.appendLog("错误: 游戏端口必须是 1-65535 之间的数字")
 			return
@@ -145,7 +138,7 @@ func (ua *UDPRelayApp) createUI() {
 
 			fyne.Do(func() {
 				ua.appendLog(fmt.Sprintf("客户端连接: %s", sessionID))
-				ua.refreshPlayerTable() // 刷新表格显示
+				ua.mainPage.RefreshPlayerTable() // 刷新表格显示
 			})
 			serviceID, _, publicKey, err := ua.configManager.GetKeyPairByID(0)
 			if err != nil {
@@ -179,7 +172,7 @@ func (ua *UDPRelayApp) createUI() {
 			ua.playerManager.PlayersMutex.Unlock()
 			fyne.Do(func() {
 				ua.appendLog(fmt.Sprintf("客户端断开: %s", sessionID))
-				ua.refreshPlayerTable() // 刷新表格显示
+				ua.mainPage.RefreshPlayerTable() // 刷新表格显示
 			})
 		}
 		ua.tcpService.AddRoute(proto.ID_AuthenticationIDPackageID, func(ctx easytcp.Context) {
@@ -241,8 +234,8 @@ func (ua *UDPRelayApp) createUI() {
 							player.Remark = ""
 						}
 						fyne.Do(func() {
-							ua.refreshPlayerTableItem(index+1, 0)
-							ua.refreshPlayerTableItem(index+1, 1)
+							ua.mainPage.RefreshPlayerTableItem(index+1, 0)
+							ua.mainPage.RefreshPlayerTableItem(index+1, 1)
 						})
 					}
 					if player.DeviceID != "" {
@@ -306,8 +299,8 @@ func (ua *UDPRelayApp) createUI() {
 											player.Remark = ""
 										}
 										fyne.Do(func() {
-											ua.refreshPlayerTableItem(index+1, 0)
-											ua.refreshPlayerTableItem(index+1, 1)
+											ua.mainPage.RefreshPlayerTableItem(index+1, 0)
+											ua.mainPage.RefreshPlayerTableItem(index+1, 1)
 										})
 									}
 									if player.DeviceID != "" {
@@ -490,7 +483,7 @@ func (ua *UDPRelayApp) createUI() {
 						ua.udpRelay[player.Port] = relay
 					}
 					fyne.Do(func() {
-						ua.refreshPlayerTableItem(index+1, 1)
+						ua.mainPage.RefreshPlayerTableItem(index+1, 1)
 					})
 				}
 				if player.DeviceID != "" {
@@ -535,17 +528,13 @@ func (ua *UDPRelayApp) createUI() {
 			player,
 		}
 		ua.playerManager.PlayersMutex.Unlock()
-		ua.refreshPlayerTable()
+		ua.mainPage.RefreshPlayerTable()
 
 		ua.appendLog(fmt.Sprintf("信息：TCP服务器启动成功，监听 %s", listenPortText))
 
-		ua.startBtn.Disable()
-		ua.stopBtn.Enable()
-		listenPortEntry.Disable()
-		targetPortEntry.Disable()
-	})
-
-	ua.stopBtn = widget.NewButton("停止服务器", func() {
+		ua.mainPage.SetHostStatus()
+	}
+	ua.mainPage.StopBtn.OnTapped = func() {
 		// 停止所有UDP中继服务器
 		for port, relay := range ua.udpRelay {
 			relay.Stop()
@@ -556,24 +545,17 @@ func (ua *UDPRelayApp) createUI() {
 		ua.playerManager.PlayersMutex.Lock()
 		ua.playerManager.Players = []*game.Player{}
 		ua.playerManager.PlayersMutex.Unlock()
-		ua.refreshPlayerTable()
+		ua.mainPage.RefreshPlayerTable()
 
 		if ua.tcpService != nil {
 			ua.tcpService.Stop()
 			ua.tcpService = nil
 		}
 
-		ua.startBtn.Enable()
-		ua.stopBtn.Disable()
-
-		listenPortEntry.Enable()
-		targetPortEntry.Enable()
-	})
-	ua.stopBtn.Disable()
-
-	// 客机模式按钮
-	ua.connectBtn = widget.NewButton("连接服务器", func() {
-		targetHost := strings.TrimSpace(targetHostEntry.Text)
+		ua.mainPage.SetIdleStatus()
+	}
+	ua.mainPage.ConnectBtn.OnTapped = func() {
+		targetHost := strings.TrimSpace(ua.mainPage.TargetHostEntry.Text)
 		if targetHost == "" {
 			ua.appendLog("错误：请输入目标主机地址")
 			return
@@ -611,16 +593,14 @@ func (ua *UDPRelayApp) createUI() {
 					ua.appendLog(fmt.Sprintf("错误：保存连接地址失败: %v", err))
 				})
 			}
-			ua.connectBtn.Disable()
-			ua.disconnectBtn.Enable()
-			targetHostEntry.Disable()
+			ua.mainPage.SetClientStatus()
 		}
 		ua.tcpClient.OnDisconnected = func() {
 			ua.playerManager.PlayersMutex.Lock()
 			defer ua.playerManager.PlayersMutex.Unlock()
 			ua.playerManager.Players = []*game.Player{}
 			fyne.Do(func() {
-				ua.refreshPlayerTable()
+				ua.mainPage.RefreshPlayerTable()
 			})
 		}
 		ua.tcpClient.AddHandler(proto.ID_ServiceIDPackageID, func(m *easytcp.Message) {
@@ -680,7 +660,7 @@ func (ua *UDPRelayApp) createUI() {
 				ua.playerManager.Players[0].Remark = ""
 			}
 			fyne.Do(func() {
-				ua.refreshPlayerTableItem(1, 0)
+				ua.mainPage.RefreshPlayerTableItem(1, 0)
 			})
 		})
 		ua.tcpClient.AddHandler(proto.ID_ConfirmRegisterPackageID, func(m *easytcp.Message) {
@@ -709,7 +689,7 @@ func (ua *UDPRelayApp) createUI() {
 			}
 			ua.playerManager.PlayersMutex.Unlock()
 			fyne.Do(func() {
-				ua.refreshPlayerTableItem(1, 0)
+				ua.mainPage.RefreshPlayerTableItem(1, 0)
 			})
 		})
 		ua.tcpClient.AddHandler(proto.ID_AllUserInfoPackageID, func(m *easytcp.Message) {
@@ -851,7 +831,7 @@ func (ua *UDPRelayApp) createUI() {
 
 			// 刷新表格显示
 			fyne.Do(func() {
-				ua.refreshPlayerTable()
+				ua.mainPage.RefreshPlayerTable()
 			})
 		})
 		ua.tcpClient.AddHandler(proto.ID_ForwardPackageID, func(m *easytcp.Message) {
@@ -931,7 +911,7 @@ func (ua *UDPRelayApp) createUI() {
 			}
 			ua.playerManager.Players = append(ua.playerManager.Players, player)
 			fyne.Do(func() {
-				ua.refreshPlayerTable()
+				ua.mainPage.RefreshPlayerTable()
 			})
 		})
 		ua.tcpClient.AddHandler(proto.ID_RemoveDevicePackageID, func(m *easytcp.Message) {
@@ -962,9 +942,8 @@ func (ua *UDPRelayApp) createUI() {
 			ua.appendLog(fmt.Sprintf("错误：连接服务器失败: %v", err))
 			return
 		}
-
-	})
-	ua.disconnectBtn = widget.NewButton("断开服务器", func() {
+	}
+	ua.mainPage.DisconnectBtn.OnTapped = func() {
 		ua.tcpClient.Disconnect()
 		ua.tcpClient = nil
 		ua.playerManager.PlayersMutex.Lock()
@@ -975,87 +954,72 @@ func (ua *UDPRelayApp) createUI() {
 			relay.Stop()
 			delete(ua.udpRelay, port)
 		}
-		ua.refreshPlayerTable()
+		ua.mainPage.RefreshPlayerTable()
 		ua.appendLog("信息：断开服务器连接")
-		ua.connectBtn.Enable()
-		ua.disconnectBtn.Disable()
-		targetHostEntry.Enable()
-		targetPortEntry.Enable()
-	})
-	ua.disconnectBtn.Disable()
+		ua.mainPage.SetIdleStatus()
+	}
+	ua.mainPage.ClearBtn.OnTapped = func() {
+		ua.mainPage.LogText.SetText("")
+	}
+	ua.mainPage.ClearBtn1.OnTapped = ua.mainPage.ClearBtn1.OnTapped
+	ua.mainPage.PlayerTable.CreateCell = func() fyne.CanvasObject {
+		return widget.NewLabel("模板文本")
+	}
+	ua.mainPage.PlayerTable.Length = func() (int, int) {
+		ua.playerManager.PlayersMutex.RLock()
+		defer ua.playerManager.PlayersMutex.RUnlock()
+		return len(ua.playerManager.Players) + 2, 5 // 行数(玩家数+表头+底部)，列数
+	}
+	ua.mainPage.PlayerTable.UpdateCell = func(id widget.TableCellID, template fyne.CanvasObject) {
+		label := template.(*widget.Label)
+		if id.Row == 0 {
+			// 表头
+			switch id.Col {
+			case 0:
+				label.SetText("玩家")
+			case 1:
+				label.SetText("端口")
+			case 2:
+				label.SetText("上传速度")
+			case 3:
+				label.SetText("下载速度")
+			case 4:
+				label.SetText("Ping")
+			}
+			return
+		}
 
-	clearBtn := widget.NewButton("清空日志", func() {
-		ua.logText.SetText("")
-	})
+		ua.playerManager.PlayersMutex.RLock()
+		defer ua.playerManager.PlayersMutex.RUnlock()
 
-	// 创建玩家列表表格
-	ua.createPlayerTable()
-	playerTableScroll := container.NewScroll(ua.playerTable)
-	playerTableScroll.SetMinSize(fyne.NewSize(550, 150))
-
-	// 日志区域
-	ua.logText.Disable()
-
-	// 主机模式的内容
-	hostContent := container.NewVBox(
-		container.NewBorder(nil, nil, widget.NewLabel("监听端口"), nil, listenPortEntry),
-		container.NewBorder(nil, nil, widget.NewLabel("游戏端口"), nil, targetPortEntry),
-		container.NewHBox(ua.startBtn, ua.stopBtn),
-	)
-
-	// 客机模式的内容
-	clientContent := container.NewVBox(
-		container.NewBorder(nil, nil, widget.NewLabel("目标主机"), nil, targetHostEntry),
-		container.NewBorder(nil, nil, widget.NewLabel("历史主机"), nil, historyAddressSelect),
-		layout.NewSpacer(),
-		container.NewHBox(ua.connectBtn, ua.disconnectBtn),
-	)
-
-	// 创建Tab容器
-	tabs := container.NewAppTabs(
-		container.NewTabItem("作为主机", hostContent),
-		container.NewTabItem("作为客机", clientContent),
-	)
-
-	// 设置Tab切换回调
-	tabs.OnSelected = func(ti *container.TabItem) {
+		if id.Row-1 < len(ua.playerManager.Players) {
+			player := ua.playerManager.Players[id.Row-1]
+			switch id.Col {
+			case 0:
+				// 展示备注，如果没有备注则展示ID
+				if player.Remark != "" {
+					label.SetText(player.Remark)
+				} else {
+					label.SetText(player.DeviceID)
+				}
+			case 1:
+				label.SetText(strconv.Itoa(player.Port))
+			case 2:
+				label.SetText(player.UploadSpeed)
+			case 3:
+				label.SetText(player.DownloadSpeed)
+			case 4:
+				label.SetText(strconv.Itoa(player.Ping) + "ms")
+			}
+		} else {
+			label.SetText("")
+		}
+	}
+	ua.mainPage.Tabs.OnSelected = func(ti *container.TabItem) {
 		// 保存当前选中的tab索引
-		tabIndex := strconv.Itoa(tabs.SelectedIndex())
+		tabIndex := strconv.Itoa(ua.mainPage.Tabs.SelectedIndex())
 		ua.configManager.SetConfigDebounced("last_tab", tabIndex)
 	}
-
-	// 恢复最后选择的tab
-	lastTab := ua.configManager.GetConfig("last_tab", "0")
-	if tabIndex, err := strconv.Atoi(lastTab); err == nil && tabIndex >= 0 && tabIndex < len(tabs.Items) {
-		tabs.SelectIndex(tabIndex)
-	}
-
-	buttonRow := container.NewHBox(
-		clearBtn,
-		layout.NewSpacer(),
-	)
-
-	statusBox := container.NewVBox(
-		buttonRow,
-	)
-
-	logScroll := container.NewScroll(ua.logText)
-	logScroll.SetMinSize(fyne.NewSize(550, 150))
-
-	topContent := container.NewVBox(
-		widget.NewLabel("UDP 中继服务器"),
-		tabs,
-		statusBox,
-		widget.NewSeparator(),
-		widget.NewLabel("玩家列表"),
-		playerTableScroll,
-		widget.NewSeparator(),
-		widget.NewLabel("运行日志"),
-	)
-
-	// 使用Border布局，将顶部内容放在North，日志区域放在Center以填充剩余空间
-	content := container.NewBorder(topContent, nil, nil, nil, logScroll)
-	ua.window.SetContent(content)
 }
 
 // 分配端口并启动UDP中继服务器
@@ -1208,99 +1172,35 @@ func (ua *UDPRelayApp) startUDPRelayOnClient(port int) error {
 
 // 添加日志到界面
 func (ua *UDPRelayApp) appendLog(message string) {
-	currentText := ua.logText.Text
+	currentText := ua.mainPage.LogText.Text
 	if currentText != "" {
 		currentText += "\n"
 	}
 	currentText += message
-	ua.logText.SetText(currentText)
-	ua.logText.CursorRow = strings.Count(currentText, "\n")
+	ua.mainPage.LogText.SetText(currentText)
+	ua.mainPage.LogText.CursorRow = strings.Count(currentText, "\n")
 }
 
 // Run 运行应用程序
 func (ua *UDPRelayApp) Run() {
-	ua.createUI()
+	ua.initData()
+	ua.setEventCallbacks()
 
 	// 恢复窗口状态
 	ua.restoreWindowState()
 
 	// 设置窗口关闭事件处理
-	ua.window.SetCloseIntercept(func() {
+	ua.mainPage.Window.SetCloseIntercept(func() {
 		// 保存窗口状态
 		ua.saveWindowState()
 		// 关闭窗口
-		ua.window.Close()
+		ua.mainPage.Window.Close()
 	})
 
-	ua.window.ShowAndRun()
+	ua.mainPage.Window.ShowAndRun()
 }
 
-// 创建玩家表格
-func (ua *UDPRelayApp) createPlayerTable() {
-	ua.playerTable = widget.NewTable(
-		func() (int, int) {
-			ua.playerManager.PlayersMutex.RLock()
-			defer ua.playerManager.PlayersMutex.RUnlock()
-			return len(ua.playerManager.Players) + 2, 5 // 行数(玩家数+表头)，列数
-		},
-		func() fyne.CanvasObject {
-			return widget.NewLabel("模板文本")
-		},
-		func(tci widget.TableCellID, co fyne.CanvasObject) {
-			label := co.(*widget.Label)
-			if tci.Row == 0 {
-				// 表头
-				switch tci.Col {
-				case 0:
-					label.SetText("玩家")
-				case 1:
-					label.SetText("端口")
-				case 2:
-					label.SetText("上传速度")
-				case 3:
-					label.SetText("下载速度")
-				case 4:
-					label.SetText("Ping")
-				}
-				return
-			}
-
-			ua.playerManager.PlayersMutex.RLock()
-			defer ua.playerManager.PlayersMutex.RUnlock()
-
-			if tci.Row-1 < len(ua.playerManager.Players) {
-				player := ua.playerManager.Players[tci.Row-1]
-				switch tci.Col {
-				case 0:
-					// 展示备注，如果没有备注则展示ID
-					if player.Remark != "" {
-						label.SetText(player.Remark)
-					} else {
-						label.SetText(player.DeviceID)
-					}
-				case 1:
-					label.SetText(strconv.Itoa(player.Port))
-				case 2:
-					label.SetText(player.UploadSpeed)
-				case 3:
-					label.SetText(player.DownloadSpeed)
-				case 4:
-					label.SetText(strconv.Itoa(player.Ping) + "ms")
-				}
-			} else {
-				label.SetText("")
-			}
-		},
-	)
-
-	ua.playerTable.SetColumnWidth(0, 150) // 玩家列宽度
-	ua.playerTable.SetColumnWidth(1, 80)  // 端口列宽度
-	ua.playerTable.SetColumnWidth(2, 100) // 上传速度列宽度
-	ua.playerTable.SetColumnWidth(3, 100) // 下载速度列宽度
-	ua.playerTable.SetColumnWidth(4, 80)  // Ping列宽度
-}
-
-// startSpeedTimer 启动速度计算定时器
+// 启动速度计算定时器
 func (ua *UDPRelayApp) StartSpeedTimer() {
 	ticker := time.NewTicker(1 * time.Second)
 	go func() {
@@ -1310,7 +1210,7 @@ func (ua *UDPRelayApp) StartSpeedTimer() {
 	}()
 }
 
-// calculateAndUpdateSpeeds 计算并更新所有玩家的速度
+// 计算并更新所有玩家的速度
 func (ua *UDPRelayApp) calculateAndUpdateSpeeds() {
 	ua.playerManager.PlayersMutex.Lock()
 	defer ua.playerManager.PlayersMutex.Unlock()
@@ -1324,7 +1224,7 @@ func (ua *UDPRelayApp) calculateAndUpdateSpeeds() {
 			player.UploadSpeed = uploadSpeedStr
 			// 更新表格显示
 			fyne.Do(func() {
-				ua.refreshPlayerTableItem(row+1, 2) // +1是因为第0行是表头
+				ua.mainPage.RefreshPlayerTableItem(row+1, 2) // +1是因为第0行是表头
 			})
 		}
 
@@ -1336,7 +1236,7 @@ func (ua *UDPRelayApp) calculateAndUpdateSpeeds() {
 			player.DownloadSpeed = downloadSpeedStr
 			// 更新表格显示
 			fyne.Do(func() {
-				ua.refreshPlayerTableItem(row+1, 3) // +1是因为第0行是表头
+				ua.mainPage.RefreshPlayerTableItem(row+1, 3) // +1是因为第0行是表头
 			})
 		}
 	}
@@ -1389,24 +1289,10 @@ func (ua *UDPRelayApp) UpdatePlayerTrafficByDeviceID(deviceID string, uploadByte
 	}
 }
 
-// 更新玩家表格显示
-func (ua *UDPRelayApp) refreshPlayerTable() {
-	if ua.playerTable != nil {
-		ua.playerTable.Refresh()
-	}
-}
-
-// 更新玩家表格显示
-func (ua *UDPRelayApp) refreshPlayerTableItem(row int, col int) {
-	if ua.playerTable != nil {
-		ua.playerTable.RefreshItem(widget.TableCellID{Row: row, Col: col})
-	}
-}
-
 // 保存窗口大小
 func (ua *UDPRelayApp) saveWindowState() {
 	// 保存窗口大小
-	size := ua.window.Content().Size()
+	size := ua.mainPage.Window.Content().Size()
 	ua.configManager.SetConfigDebounced("window_width", strconv.Itoa(int(size.Width)))
 	ua.configManager.SetConfigDebounced("window_height", strconv.Itoa(int(size.Height)))
 }
@@ -1416,7 +1302,7 @@ func (ua *UDPRelayApp) restoreWindowState() {
 	// 恢复窗口大小
 	width, _ := strconv.Atoi(ua.configManager.GetConfig("window_width", "1024"))
 	height, _ := strconv.Atoi(ua.configManager.GetConfig("window_height", "768"))
-	ua.window.Resize(fyne.NewSize(float32(width), float32(height)))
+	ua.mainPage.Window.Resize(fyne.NewSize(float32(width), float32(height)))
 }
 
 // 在应用程序退出时关闭配置管理器
