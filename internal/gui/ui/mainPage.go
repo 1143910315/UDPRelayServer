@@ -29,6 +29,7 @@ type MainPage struct {
 func NewMainPage(app fyne.App) *MainPage {
 	mainPage := &MainPage{
 		Window:               app.NewWindow("UDP 中继服务器"),
+		Tabs:                 container.NewAppTabs(),
 		ListenPortEntry:      widget.NewEntry(),
 		TargetPortEntry:      widget.NewEntry(),
 		TargetHostEntry:      widget.NewEntry(),
