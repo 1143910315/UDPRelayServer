@@ -40,15 +40,22 @@ func NewTCPServer() *TCPServer {
 
 // 启动TCP服务器
 func (ts *TCPServer) Start(address string) error {
+	ts.mu.Lock()
 	if ts.isRunning {
+		ts.mu.Unlock()
 		return fmt.Errorf("服务器已经启动，请先停止服务器")
 	}
 	ts.isRunning = true
+	ts.mu.Unlock()
 
 	// 在goroutine中运行服务器
 	ts.wg.Go(func() {
 		if err := ts.service.Run(address); err != nil {
-			ts.log("ERROR", fmt.Sprintf("服务器错误: %s", err))
+			ts.mu.Lock()
+			if ts.isRunning {
+				ts.log("error", fmt.Sprintf("服务器错误: %s", err))
+			}
+			ts.mu.Unlock()
 		}
 	})
 	return nil
@@ -56,11 +63,14 @@ func (ts *TCPServer) Start(address string) error {
 
 // 停止TCP服务器
 func (ts *TCPServer) Stop() {
+	ts.mu.Lock()
 	if !ts.isRunning {
+		ts.mu.Unlock()
 		return
 	}
 
 	ts.isRunning = false
+	ts.mu.Unlock()
 	if ts.service != nil {
 		ts.service.Stop()
 	}
@@ -74,6 +84,8 @@ func (ts *TCPServer) Stop() {
 
 // 检查服务器是否在运行
 func (ts *TCPServer) IsRunning() bool {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
 	return ts.isRunning
 }
 

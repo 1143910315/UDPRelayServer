@@ -81,18 +81,17 @@ func (tc *TCPClient) setupConnection(conn net.Conn, addr string) error {
 	go tc.readLoop()
 	go tc.writeLoop()
 
-	tc.log("INFO", fmt.Sprintf("TCP client connected to %s", addr))
 	return nil
 }
 
 // 断开连接内部方法
 func (tc *TCPClient) disconnectInternal() {
+	tc.isConnected = false
+
 	if tc.conn != nil {
 		tc.conn.Close()
 		tc.conn = nil
 	}
-
-	tc.isConnected = false
 
 	// 触发断开连接事件
 	if tc.OnDisconnected != nil {
@@ -103,7 +102,6 @@ func (tc *TCPClient) disconnectInternal() {
 // 断开连接
 func (tc *TCPClient) Disconnect() {
 	tc.mu.Lock()
-	defer tc.mu.Unlock()
 
 	// 设置停止标志并关闭通道，确保所有goroutine都能收到停止信号
 	if !tc.isConnected && tc.stopChan != nil {
@@ -125,9 +123,9 @@ func (tc *TCPClient) Disconnect() {
 		close(tc.stopChan)
 		tc.stopChan = make(chan struct{}) // 重新创建通道以备下次使用
 	}
+	tc.mu.Unlock()
 
 	tc.wg.Wait()
-	tc.log("INFO", "TCP client disconnected")
 }
 
 // 重连循环
@@ -142,7 +140,7 @@ func (tc *TCPClient) reconnectLoop() {
 	for {
 		select {
 		case <-tc.stopChan:
-			tc.log("INFO", "Reconnect loop stopped by Disconnect")
+			tc.log("info", "Reconnect loop stopped by Disconnect")
 			return
 		case <-ticker.C:
 			tc.mu.Lock()
@@ -155,7 +153,7 @@ func (tc *TCPClient) reconnectLoop() {
 			select {
 			case <-tc.stopChan:
 				tc.mu.Unlock()
-				tc.log("INFO", "Reconnect loop stopped before dialing")
+				tc.log("info", "Reconnect loop stopped before dialing")
 				return
 			default:
 			}
@@ -164,14 +162,14 @@ func (tc *TCPClient) reconnectLoop() {
 			conn, err := net.Dial("tcp", tc.addr)
 			if err != nil {
 				tc.mu.Unlock()
-				// tc.log("WARN", fmt.Sprintf("Reconnect failed: %v", err))
+				// tc.log("warn", fmt.Sprintf("Reconnect failed: %v", err))
 				continue
 			}
 
 			// 重连成功
 			tc.setupConnection(conn, tc.addr)
 			tc.mu.Unlock()
-			tc.log("INFO", "Reconnected to server")
+			tc.log("info", "Reconnected to server")
 			return // 重连成功，退出重连循环
 		}
 	}
@@ -243,10 +241,10 @@ func (tc *TCPClient) readLoop() {
 					continue
 				}
 
-				// 连接断开
-				tc.log("ERROR", fmt.Sprintf("Read error: %v", err))
 				tc.mu.Lock()
 				if tc.isConnected {
+					// 连接意外断开
+					tc.log("error", fmt.Sprintf("Read error: %v", err))
 					tc.disconnectInternal()
 					// 检查是否应该启动重连（确保不在停止状态）
 					select {
@@ -282,7 +280,7 @@ func (tc *TCPClient) writeLoop() {
 
 			_, err := tc.conn.Write(message)
 			if err != nil {
-				tc.log("ERROR", fmt.Sprintf("Write error: %v", err))
+				tc.log("error", fmt.Sprintf("Write error: %v", err))
 				tc.mu.Lock()
 				if tc.isConnected {
 					tc.disconnectInternal()
@@ -312,7 +310,7 @@ func (tc *TCPClient) handleMessage(message *easytcp.Message) {
 	if exists {
 		handler(message)
 	} else {
-		tc.log("DEBUG", fmt.Sprintf("No handler for message ID: %d, Data: %v", message.ID(), message.Data()))
+		tc.log("debug", fmt.Sprintf("No handler for message ID: %d, Data: %v", message.ID(), message.Data()))
 	}
 }
 

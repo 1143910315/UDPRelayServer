@@ -1,4 +1,4 @@
-package game
+package data
 
 // 玩家结构体
 type Player struct {

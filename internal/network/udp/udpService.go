@@ -11,7 +11,7 @@ import (
 )
 
 // 日志回调函数类型
-type LogCallback func(level string, format string, args ...interface{})
+type LogCallback func(level string, message string)
 
 // 接收数据回调函数类型
 type DataCallback func(data []byte, addr *net.UDPAddr)
@@ -102,7 +102,7 @@ func (s *UDPService) log(level string, format string, args ...interface{}) {
 	s.mu.RUnlock()
 
 	if callback != nil {
-		callback(level, format, args...)
+		callback(level, fmt.Sprintf(format, args...))
 	} else {
 		// 默认日志输出
 		log.Printf("[%s] %s", level, fmt.Sprintf(format, args...))
@@ -119,7 +119,7 @@ func (s *UDPService) Start() error {
 	addr := fmt.Sprintf(":%d", s.config.Port)
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
-		s.log("ERROR", "Failed to resolve UDP address: %v", err)
+		s.log("error", "Failed to resolve UDP address: %v", err)
 		return err
 	}
 
@@ -127,7 +127,7 @@ func (s *UDPService) Start() error {
 	var conn *net.UDPConn
 	conn, err = net.ListenUDP("udp", udpAddr)
 	if err != nil {
-		s.log("ERROR", "Failed to listen UDP: %v", err)
+		s.log("error", "Failed to listen UDP: %v", err)
 		return err
 	}
 
@@ -138,7 +138,7 @@ func (s *UDPService) Start() error {
 	// 设置超时
 	if s.config.ReadTimeout > 0 {
 		if err := conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout)); err != nil {
-			s.log("WARN", "Failed to set read timeout: %v", err)
+			s.log("warn", "Failed to set read timeout: %v", err)
 		}
 	}
 
@@ -163,7 +163,7 @@ func (s *UDPService) startSendWorkers() {
 		go s.sendWorker(i)
 		s.sendWorkers++
 	}
-	s.log("INFO", "Started %d send workers", s.config.MaxWorkers)
+	s.log("info", "Started %d send workers", s.config.MaxWorkers)
 }
 
 // 发送工作协程
@@ -173,7 +173,7 @@ func (s *UDPService) sendWorker(id int) {
 	for {
 		select {
 		case <-s.isStopped:
-			s.log("DEBUG", "Send worker %d stopped", id)
+			s.log("debug", "Send worker %d stopped", id)
 			return
 		case msg := <-s.sendQueue:
 			if msg == nil {
@@ -209,7 +209,7 @@ func (s *UDPService) receiveLoop() {
 				}
 
 				if s.isRunning.Load() {
-					s.log("ERROR", "Error reading from UDP: %v", err)
+					s.log("error", "Error reading from UDP: %v", err)
 				}
 				continue
 			}
@@ -228,7 +228,7 @@ func (s *UDPService) receiveLoop() {
 				go func(data []byte, addr *net.UDPAddr) {
 					defer func() {
 						if r := recover(); r != nil {
-							s.log("ERROR", "Panic in data callback: %v", r)
+							s.log("error", "Panic in data callback: %v", r)
 						}
 					}()
 					callback(data, addr)
@@ -277,7 +277,7 @@ func (s *UDPService) SendAsync(data []byte, addr string, callback SendCallback) 
 
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
-		s.log("ERROR", "Failed to resolve address %s: %v", addr, err)
+		s.log("error", "Failed to resolve address %s: %v", addr, err)
 		if callback != nil {
 			callback(data, nil, err)
 		}
@@ -294,7 +294,7 @@ func (s *UDPService) SendAsync(data []byte, addr string, callback SendCallback) 
 		return nil
 	default:
 		err := errors.New("send queue is full")
-		s.log("ERROR", "Send queue is full")
+		s.log("error", "Send queue is full")
 		if callback != nil {
 			callback(data, udpAddr, err)
 		}

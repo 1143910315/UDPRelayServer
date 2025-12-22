@@ -1,12 +1,12 @@
 package utils
 
-// AdvancedStringIncrementer 提供字符串递增功能
+// 提供字符串递增功能
 type AdvancedStringIncrementer struct {
 	characterSet   []rune
 	charToIndexMap map[rune]int
 }
 
-// NewAdvancedStringIncrementer 创建新的字符串递增器
+// 创建新的字符串递增器
 func NewAdvancedStringIncrementer() *AdvancedStringIncrementer {
 	charset := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 	charsetRunes := []rune(charset)
@@ -22,7 +22,7 @@ func NewAdvancedStringIncrementer() *AdvancedStringIncrementer {
 	}
 }
 
-// IncrementString 递增字符串，确保返回结果不等于输入
+// 递增字符串，确保返回结果不等于输入
 func (asi *AdvancedStringIncrementer) IncrementString(input string) string {
 	if input == "" {
 		// 空字符串时返回字符集的第一个字符
