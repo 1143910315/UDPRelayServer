@@ -26,7 +26,6 @@ type TCPClient struct {
 	OnLog             func(level, message string)
 	addr              string
 	reconnectInterval time.Duration
-	reconnectChan     chan struct{}
 	OnConnected       func()
 	OnDisconnected    func()
 }
@@ -43,7 +42,6 @@ func NewTCPClient() *TCPClient {
 		messageChan:       make(chan []byte, 100),
 		handlers:          make(map[proto.ID]MessageHandler),
 		reconnectInterval: time.Second,
-		reconnectChan:     make(chan struct{}, 1),
 	}
 }
 
@@ -353,8 +351,8 @@ func (tc *TCPClient) SetWriteTimeout(timeout time.Duration) error {
 }
 
 // 内部日志记录方法
-func (ts *TCPClient) log(level, message string) {
-	if ts.OnLog != nil {
-		ts.OnLog(level, message)
+func (tc *TCPClient) log(level, message string) {
+	if tc.OnLog != nil {
+		tc.OnLog(level, message)
 	}
 }
