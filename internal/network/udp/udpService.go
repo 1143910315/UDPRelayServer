@@ -39,9 +39,7 @@ func DefaultConfig() *ServiceConfig {
 	}
 }
 
-// ===================== UDP服务主体 =====================
-
-// UDPService UDP服务
+// UDP服务
 type UDPService struct {
 	mu        sync.RWMutex
 	config    *ServiceConfig
@@ -59,16 +57,14 @@ type UDPService struct {
 	sendWorkers int
 }
 
-// udpMessage UDP消息结构
+// UDP消息结构
 type udpMessage struct {
 	data     []byte
 	addr     *net.UDPAddr
 	callback SendCallback
 }
 
-// ===================== 构造函数和配置 =====================
-
-// NewUDPService 创建新的UDP服务
+// 创建新的UDP服务
 func NewUDPService(config *ServiceConfig) *UDPService {
 	if config == nil {
 		config = DefaultConfig()
@@ -81,14 +77,14 @@ func NewUDPService(config *ServiceConfig) *UDPService {
 	}
 }
 
-// SetLogCallback 设置日志回调函数
+// 设置日志回调函数
 func (s *UDPService) SetLogCallback(callback LogCallback) {
 	s.mu.Lock()
 	s.logCallback = callback
 	s.mu.Unlock()
 }
 
-// SetDataCallback 设置数据接收回调函数
+// 设置数据接收回调函数
 func (s *UDPService) SetDataCallback(callback DataCallback) {
 	s.mu.Lock()
 	s.dataCallback = callback
@@ -269,7 +265,7 @@ func (s *UDPService) Send(data []byte, addr string) error {
 	return nil
 }
 
-// SendAsync 异步发送UDP数据
+// 异步发送UDP数据
 func (s *UDPService) SendAsync(data []byte, addr string, callback SendCallback) error {
 	if !s.isRunning.Load() {
 		return errors.New("service is not running")
@@ -327,7 +323,7 @@ func (s *UDPService) sendDirect(data []byte, addr *net.UDPAddr, callback SendCal
 	}
 }
 
-// Stop 停止UDP服务
+// 停止UDP服务
 func (s *UDPService) Stop() error {
 	if !s.isRunning.Load() {
 		return errors.New("service is not running")

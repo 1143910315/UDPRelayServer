@@ -13,6 +13,7 @@ import (
 	"github.com/DarthPestilane/easytcp"
 )
 
+// 主机会话
 type HostSession struct {
 	tcpService                   *tcp.TCPServer
 	reservePort                  map[string]int
@@ -27,6 +28,7 @@ type HostSession struct {
 	CheckDeviceAuthentication    func(serviceIDIndex int, deviceID string, authenticationID string) bool
 }
 
+// 创建主机会话
 func NewHostSession() *HostSession {
 	return &HostSession{
 		reservePort:   make(map[string]int),
@@ -35,6 +37,7 @@ func NewHostSession() *HostSession {
 	}
 }
 
+// 启动服务
 func (s *HostSession) Start(address string, targetPort int) error {
 	s.targetPort = targetPort
 	s.tcpService = tcp.NewTCPServer()
@@ -343,6 +346,7 @@ func (s *HostSession) Start(address string, targetPort int) error {
 	return nil
 }
 
+// 停止服务
 func (s *HostSession) Stop() {
 	// 停止所有UDP中继服务器
 	for port, relay := range s.udpRelay {

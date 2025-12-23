@@ -34,7 +34,7 @@ type UDPRelayApp struct {
 	appendLog                 func(level, message string)
 }
 
-// NewUDPRelayApp 创建新的GUI应用程序
+// 创建新的GUI应用程序
 func NewUDPRelayApp() (*UDPRelayApp, error) {
 	myApp := app.New()
 	// 设置自定义主题
@@ -305,7 +305,7 @@ func (ua *UDPRelayApp) setEventCallbacks() {
 	}
 }
 
-// Run 运行应用程序
+// 运行应用程序
 func (ua *UDPRelayApp) Run() {
 	ua.initData()
 	ua.setEventCallbacks()

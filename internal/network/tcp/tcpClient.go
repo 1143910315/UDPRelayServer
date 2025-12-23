@@ -61,11 +61,11 @@ func (tc *TCPClient) Connect(addr string) error {
 	if err != nil {
 		return err
 	}
-	return tc.setupConnection(conn, addr)
+	return tc.setupConnection(conn)
 }
 
 // 设置连接
-func (tc *TCPClient) setupConnection(conn net.Conn, addr string) error {
+func (tc *TCPClient) setupConnection(conn net.Conn) error {
 	tc.conn = conn
 	tc.isConnected = true
 
@@ -165,7 +165,7 @@ func (tc *TCPClient) reconnectLoop() {
 			}
 
 			// 重连成功
-			tc.setupConnection(conn, tc.addr)
+			tc.setupConnection(conn)
 			tc.mu.Unlock()
 			tc.log("info", "Reconnected to server")
 			return // 重连成功，退出重连循环
