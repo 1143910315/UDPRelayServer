@@ -429,24 +429,52 @@ func (s *HostSession) startUDPRelay(port int) error {
 	relay.SetDataCallback(func(data []byte, addr *net.UDPAddr) {
 		s.PlayerManager.PlayersMutex.Lock()
 		defer s.PlayerManager.PlayersMutex.Unlock()
+		needSend := false
+		var packedMsg []byte
 		for index, player := range s.PlayerManager.Players {
 			if index == 0 {
 				if player.Port != addr.Port {
-
+					var err error
+					req := &proto.AddOrUpdateDevicePackage{
+						DeviceId: player.DeviceID,
+						Port:     int32(player.Port),
+					}
+					packedMsg, err = s.tcpService.PackerData(proto.ID_AddOrUpdateDevicePackageID, req)
+					if err != nil {
+						s.OnLog("error", "打包更新端口信息包失败: "+err.Error())
+						return
+					}
+					needSend = true
 				}
-			} else if player.Port == udpConfig.Port {
-				req := &proto.ForwardPackage{
-					Port:  int32(addr.Port),
-					Bytes: data,
+			} else {
+				if needSend {
+					err := s.tcpService.SendRawToSession(player.SessionID, packedMsg)
+					if err != nil {
+						s.OnLog("error", "发送更新端口信息包给 "+player.SessionID+" 失败: "+err.Error())
+					} else {
+						player.TotalUpload += int64(len(packedMsg))
+						s.PlayerManager.Players[0].TotalUpload += int64(len(packedMsg))
+					}
 				}
-				sendBytesSize, err := s.tcpService.SendToSession(player.SessionID, proto.ID_ForwardPackageID, req)
-				if err != nil {
-					s.OnLog("error", "发送转发包失败: "+err.Error())
-					return
+				if player.Port == udpConfig.Port {
+					req := &proto.ForwardPackage{
+						Port:  int32(addr.Port),
+						Bytes: data,
+					}
+					sendBytesSize, err := s.tcpService.SendToSession(player.SessionID, proto.ID_ForwardPackageID, req)
+					if err != nil {
+						s.OnLog("error", "发送转发包给 "+player.SessionID+" 失败: "+err.Error())
+						if !needSend {
+							return
+						}
+					} else {
+						player.TotalUpload += int64(sendBytesSize)
+						s.PlayerManager.Players[0].TotalUpload += int64(sendBytesSize)
+						if !needSend {
+							break
+						}
+					}
 				}
-				player.TotalUpload += int64(sendBytesSize)
-				s.PlayerManager.Players[0].TotalUpload += int64(sendBytesSize)
-				break
 			}
 		}
 	})
