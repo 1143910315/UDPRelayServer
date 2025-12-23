@@ -92,7 +92,7 @@ func (s *UDPService) SetDataCallback(callback DataCallback) {
 }
 
 // 内部日志函数
-func (s *UDPService) log(level string, format string, args ...interface{}) {
+func (s *UDPService) log(level string, format string, args ...any) {
 	s.mu.RLock()
 	callback := s.logCallback
 	s.mu.RUnlock()
