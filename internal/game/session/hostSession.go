@@ -434,6 +434,7 @@ func (s *HostSession) startUDPRelay(port int) error {
 		for index, player := range s.PlayerManager.Players {
 			if index == 0 {
 				if player.Port != addr.Port {
+					s.OnLog("info", fmt.Sprintf("从端口 %d 切换到端口 %d", player.Port, addr.Port))
 					var err error
 					req := &proto.AddOrUpdateDevicePackage{
 						DeviceId: player.DeviceID,

@@ -346,6 +346,7 @@ func (s *ClientSession) startUDPRelay(port int) error {
 		for index, player := range s.PlayerManager.Players {
 			if index == 0 {
 				if player.Port != addr.Port {
+					s.OnLog("info", fmt.Sprintf("从端口 %d 切换到端口 %d", player.Port, addr.Port))
 					player.Port = addr.Port
 					req := &proto.BindPortPackage{
 						Port: int32(player.Port),
