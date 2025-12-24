@@ -115,7 +115,6 @@ func (s *UDPService) Start() error {
 	addr := fmt.Sprintf(":%d", s.config.Port)
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
-		s.log("error", "Failed to resolve UDP address: %v", err)
 		return err
 	}
 
@@ -123,7 +122,6 @@ func (s *UDPService) Start() error {
 	var conn *net.UDPConn
 	conn, err = net.ListenUDP("udp", udpAddr)
 	if err != nil {
-		s.log("error", "Failed to listen UDP: %v", err)
 		return err
 	}
 
