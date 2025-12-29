@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sync"
@@ -15,19 +16,21 @@ import (
 type TCPClient struct {
 	conn              net.Conn
 	packer            *protocol.LengthWithIDPacker
-	Codec             *easytcp.ProtobufCodec
 	isConnected       bool
 	mu                sync.RWMutex
 	wg                sync.WaitGroup
-	stopChan          chan struct{}
 	messageChan       chan []byte
 	handlers          map[proto.ID]MessageHandler
 	handlerMu         sync.RWMutex
-	OnLog             func(level, message string)
 	addr              string
+	ctx               context.Context
+	cancel            context.CancelFunc
 	reconnectInterval time.Duration
-	OnConnected       func()
-	OnDisconnected    func()
+
+	Codec          *easytcp.ProtobufCodec
+	OnLog          func(level, message string)
+	OnConnected    func()
+	OnDisconnected func()
 }
 
 // 消息处理器类型
@@ -35,12 +38,15 @@ type MessageHandler func(*easytcp.Message)
 
 // 创建新的TCP客户端实例
 func NewTCPClient() *TCPClient {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &TCPClient{
 		packer:            &protocol.LengthWithIDPacker{},
 		Codec:             &easytcp.ProtobufCodec{},
-		stopChan:          make(chan struct{}),
 		messageChan:       make(chan []byte, 100),
 		handlers:          make(map[proto.ID]MessageHandler),
+		ctx:               ctx,
+		cancel:            cancel,
 		reconnectInterval: time.Second,
 	}
 }
@@ -101,29 +107,24 @@ func (tc *TCPClient) disconnectInternal() {
 func (tc *TCPClient) Disconnect() {
 	tc.mu.Lock()
 
-	// 设置停止标志并关闭通道，确保所有goroutine都能收到停止信号
-	if !tc.isConnected && tc.stopChan != nil {
-		// 如果在重连状态下，需要停止重连循环
-		close(tc.stopChan)
-		tc.stopChan = make(chan struct{}) // 重新创建通道以备下次使用
-		tc.wg.Wait()
-		return
-	}
-
 	if !tc.isConnected {
+		tc.mu.Unlock()
+		// 如果未连接，仍然取消context以停止可能正在运行的重连循环
+		tc.cancel()
+		tc.wg.Wait()
+		// 重新创建context以备下次使用
+		tc.ctx, tc.cancel = context.WithCancel(context.Background())
 		return
 	}
 
 	tc.disconnectInternal()
-
-	// 发送停止信号以终止所有循环（包括重连循环）
-	if tc.stopChan != nil {
-		close(tc.stopChan)
-		tc.stopChan = make(chan struct{}) // 重新创建通道以备下次使用
-	}
 	tc.mu.Unlock()
 
-	tc.wg.Wait()
+	tc.cancel()  // 取消所有goroutine
+	tc.wg.Wait() // 等待所有goroutine退出
+
+	// 重新创建context以备下次连接
+	tc.ctx, tc.cancel = context.WithCancel(context.Background())
 }
 
 // 重连循环
@@ -137,7 +138,7 @@ func (tc *TCPClient) reconnectLoop() {
 
 	for {
 		select {
-		case <-tc.stopChan:
+		case <-tc.ctx.Done():
 			tc.log("info", "Reconnect loop stopped by Disconnect")
 			return
 		case <-ticker.C:
@@ -147,9 +148,9 @@ func (tc *TCPClient) reconnectLoop() {
 				continue
 			}
 
-			// 检查是否已经停止
+			// 检查context是否已取消
 			select {
-			case <-tc.stopChan:
+			case <-tc.ctx.Done():
 				tc.mu.Unlock()
 				tc.log("info", "Reconnect loop stopped before dialing")
 				return
@@ -202,6 +203,8 @@ func (tc *TCPClient) Send(msgID proto.ID, v any) (int, error) {
 	select {
 	case tc.messageChan <- packedMsg:
 		return len(packedMsg), nil
+	case <-tc.ctx.Done():
+		return 0, fmt.Errorf("client is disconnecting")
 	case <-time.After(5 * time.Second):
 		return 0, fmt.Errorf("send timeout")
 	}
@@ -224,9 +227,13 @@ func (tc *TCPClient) RemoveHandler(msgID proto.ID) {
 // 读取循环
 func (tc *TCPClient) readLoop() {
 	defer tc.wg.Done()
+
+	// 创建本地引用，避免竞态
+	ctx := tc.ctx
+
 	for {
 		select {
-		case <-tc.stopChan:
+		case <-ctx.Done():
 			return
 		default:
 			// 设置读取超时，用于检测连接状态
@@ -244,9 +251,9 @@ func (tc *TCPClient) readLoop() {
 					// 连接意外断开
 					tc.log("error", fmt.Sprintf("Read error: %v", err))
 					tc.disconnectInternal()
-					// 检查是否应该启动重连（确保不在停止状态）
+					// 检查context是否已取消
 					select {
-					case <-tc.stopChan:
+					case <-ctx.Done():
 						tc.mu.Unlock()
 						return
 					default:
@@ -267,9 +274,12 @@ func (tc *TCPClient) readLoop() {
 func (tc *TCPClient) writeLoop() {
 	defer tc.wg.Done()
 
+	// 创建本地引用，避免竞态
+	ctx := tc.ctx
+
 	for {
 		select {
-		case <-tc.stopChan:
+		case <-ctx.Done():
 			return
 		case message := <-tc.messageChan:
 			if message == nil {
@@ -282,9 +292,9 @@ func (tc *TCPClient) writeLoop() {
 				tc.mu.Lock()
 				if tc.isConnected {
 					tc.disconnectInternal()
-					// 检查是否应该启动重连（确保不在停止状态）
+					// 检查context是否已取消
 					select {
-					case <-tc.stopChan:
+					case <-ctx.Done():
 						tc.mu.Unlock()
 						return
 					default:
